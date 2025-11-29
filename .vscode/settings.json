@@ -1,0 +1,96 @@
+{
+	"github.copilot.chat.codeGeneration.instructions": [
+		{
+			"text": "This dev container includes `python3` and `pip3` pre-installed and available on the `PATH`, along with the Python language extensions for Python development."
+		}
+	],
+	"python.defaultInterpreterPath": "/usr/local/bin/python",
+	"python.languageServer": "Pylance",
+	"[python]": {
+		"editor.defaultFormatter": "ms-python.autopep8",
+		"editor.formatOnSave": true,
+		"editor.rulers": [
+			88
+		],
+		"editor.codeActionsOnSave": {
+			"source.organizeImports": "explicit"
+		}
+	},
+	"remote.portsAttributes": {
+		"2024": {
+			"label": "Langgraph",
+			"visibility": "public",
+			"requireLocalPort": true
+		},
+		"5000": {
+			"label": "Python App",
+			"visibility": "public",
+			"requireLocalPort": true
+		}
+	},
+	"editor.minimap.enabled": true,
+	"files.exclude": {
+		"**/__pycache__": true,
+		"**/.pytest_cache": true,
+		"**/*.pyc": true,
+		"**/.ruff_cache": true
+	},
+	"python.linting.enabled": true,
+	"python.linting.pylintEnabled": false,
+	"python.linting.flake8Enabled": true,
+	"python.terminal.activateEnvironment": true,
+	"files.autoSave": "afterDelay",
+	"files.autoSaveDelay": 1000,
+	"workbench.colorTheme": "One Dark Pro Monokai Darker Reloaded",
+	"workbench.iconTheme": "vs-seti",
+	"terminal.integrated.defaultProfile.linux": "bash",
+	"terminal.integrated.scrollback": 5000,
+	"editor.wordWrap": "on",
+	"editor.tabSize": 4,
+	"extensions.ignoreRecommendations": false,
+	"extensions.recommendations": [
+		"ms-python.python",
+		"ms-python.autopep8",
+		"ms-azuretools.vscode-docker",
+		"redhat.vscode-yaml",
+		"github.copilot",
+		"github.copilot-chat",
+		"ms-python.black-formatter",
+		"ms-toolsai.jupyter",
+		"njpwerner.autodocstring",
+		"kevinrose.vsc-python-indent",
+		"donjayamanne.python-environment-manager",
+		"tamasfe.even-better-toml",
+		"ms-vscode.live-server",
+		"wayou.vscode-todo-highlight",
+		"usernamehw.errorlens",
+		"ryanluker.vscode-coverage-gutters",
+		"pkief.material-icon-theme",
+		"mhutchie.git-graph"
+	],
+	"python.formatting.provider": "autopep8",
+	"python.analysis.typeCheckingMode": "basic",
+	"python.analysis.extraPaths": [
+		"./chatbot",
+		"./Langgraph-app"
+	],
+	"workbench.statusBar.visible": true,
+	"workbench.statusBarItemDisplaysMode": "shown",
+	"workbench.statusCodeLensDisplaysMode": "visible",
+	"eslint.alwaysShowStatus": true,
+	"git.enableStatusBarSync": true,
+	"prettier.statusBar": true,
+	"python.statusbar.selectedInterpreterDisplay": "observe",
+	"window.statusBarVisibility": "visible",
+	"editor.renderControlCharacters": true,
+	"editor.renderWhitespace": "none",
+	"LogWatcher.watchFilesOnStartup": [
+		"/workspaces/tstvictorai/chatbot/_log_utils/logs/meow.log"
+	],
+	"github.copilot.enable": {
+		"*": false,
+		"plaintext": false,
+		"markdown": false,
+		"scminput": false
+	}
+}

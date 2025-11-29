@@ -1,0 +1,35 @@
+{
+  "dockerfile_lines": [],
+  "graphs": {
+    "graph_router": "lg_main.g_command_router.graph:graph_router",
+    "graph_supervisor": "lg_main.g_supervisor.graph:graph_supervisor"
+  },
+  "env": "./.env",
+  "python_version": "3.13",
+  "dependencies": [
+    "conversation-states",
+    "langchain==0.3.23",
+    "langchain-community==0.3.21",
+    "langchain-core==0.3.54",
+    "langchain-openai==0.3.14",
+    "langchain-text-splitters==0.3.8",
+    "langgraph==0.4.3",
+    "langgraph-checkpoint-sqlite==2.0.6",
+    "langgraph-cli==0.2.10",
+    "langgraph-prebuilt==0.1.8",
+    "langgraph-runtime-inmem==0.0.11",
+    "langgraph-sdk==0.1.66",
+    "langsmith==0.3.29",
+    "tavily-python>=0.5.4",
+    "trustcall>=0.0.36",
+    "wikipedia>=1.4.0"
+  ],
+  "server": {
+    "port": 2024,
+    "host": "0.0.0.0"
+  },
+  "studio": {
+    "title": "Victor AI",
+    "description": "Victor AI is a large language model (LLM) that can be used for various natural language processing tasks. It is designed to be a versatile and powerful tool for developers and researchers."
+  }
+}

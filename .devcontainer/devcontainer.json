@@ -1,0 +1,82 @@
+{
+  "name": "Victor AI Development Environment",
+  "image": "mcr.microsoft.com/vscode/devcontainers/python:3.13",
+  "forwardPorts": [
+    2024,
+    5000
+  ],
+  // ...existing code...
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.autopep8",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "github.copilot",
+        "github.copilot-chat",
+        "ms-python.black-formatter",
+        "ms-vscode-remote.remote-containers",
+        "KevinRose.vsc-python-indent",
+        "ms-python.debugpy",
+        "automattic.logwatcher",
+        "mikoz.black-py",
+        "actboy168.tasks"
+      ],
+      "settings": {
+        "remote.portsAttributes": {
+          "2024": {
+            "visibility": "public"
+          },
+          "5000": {
+            "visibility": "public"
+          }
+        },
+        "workbench.startupEditor": "none",
+        "workbench.panel.defaultLocation": "bottom",
+        "workbench.sideBar.location": "left",
+        "workbench.activityBar.visible": true,
+        "workbench.view.explorer.enabled": true,
+        "workbench.view.search.enabled": true,
+        "workbench.view.scm.enabled": true,
+        "workbench.view.extensions.enabled": true,
+        "workbench.panel.opensMaximized": "never",
+        "workbench.editor.openSideBySideDirection": "right",
+        "workbench.statusBar.visible": true,
+        "workbench.layoutControl.enabled": true,
+        "workbench.colorCustomizations": {
+          "statusBar.background": "#252526",
+          "statusBar.foreground": "#cccccc",
+          "statusBar.noFolderBackground": "#252526",
+          "statusBar.debuggingBackground": "#2d2d2d"
+        },
+        "python.formatting.provider": "autopep8",
+        "python.linting.flake8Enabled": true,
+        "python.linting.enabled": true,
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": "explicit"
+        },
+        "python.analysis.typeCheckingMode": "basic"
+      }
+    }
+  },
+  "codespaces": {
+    "openFiles": [],
+    "repositories": {
+      "${containerWorkspaceFolder}": {
+        "permissions": {
+          "ports": "public"
+        }
+      },
+      "ViktorDyukov/conversation_states": {
+        "permissions": {
+          "read": true,
+          "write": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": ".devcontainer/_post_create_command.sh",
+  "postStartCommand": ""
+}

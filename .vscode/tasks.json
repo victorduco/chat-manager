@@ -1,0 +1,77 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "LangGraph",
+            "type": "shell",
+            "command": "${workspaceFolder}/.vscode/tasks/langgraph.sh",
+            "options": {
+                "cwd": "${workspaceFolder}/langgraph-app",
+                "env": {
+                    "PYTHONUNBUFFERED": "1"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true,
+                "focus": true,
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Chatbot",
+            "type": "shell",
+            "command": "${workspaceFolder}/.vscode/tasks/chatbot.sh",
+            "options": {
+                "cwd": "${workspaceFolder}/chatbot",
+                "env": {
+                    "PYTHONUNBUFFERED": "1"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true,
+                "focus": true,
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run All",
+            "dependsOn": [
+                "LangGraph",
+                "Chatbot"
+            ],
+            "dependsOrder": "parallel",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Clear Logs",
+            "type": "shell",
+            "command": "rm -rf ${workspaceFolder}/chatbot/logs/*",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated",
+                "clear": true,
+                "focus": false,
+                "close": true,
+                "detail": "🧹 Cleaning logs"
+            },
+            "problemMatcher": []
+        }
+        {
+            "label": "Kill Ports",
+            "type": "shell",
+            "command": "${workspaceFolder}/.vscode/tasks/kill_ports.sh",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

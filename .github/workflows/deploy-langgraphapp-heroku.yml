@@ -1,0 +1,63 @@
+name: Deploy LangGraph to Heroku
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: langgraph-app # Переходим в подпапку один раз
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Heroku CLI
+        run: curl https://cli-assets.heroku.com/install.sh | sh
+
+      - name: Login to Heroku and purge cache
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          HEROKU_BOT_NAME: ${{ secrets.HEROKU_BOT_NAME }}
+        run: |
+          echo "$HEROKU_API_KEY" | heroku auth:token
+          heroku auth:whoami
+          heroku plugins:install heroku-repo
+          heroku repo:purge_cache -a $HEROKU_BOT_NAME
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Log in to Heroku Container Registry
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
+
+      - name: Build and tag LangGraph for Heroku
+        env:
+          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+        run: |
+          langgraph build --tag registry.heroku.com/$HEROKU_APP_NAME/web
+          docker images
+
+      - name: Push Docker image to Heroku
+        env:
+          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+        run: docker push registry.heroku.com/$HEROKU_APP_NAME/web
+
+      - name: Release Docker image on Heroku
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+        run: heroku container:release web --app $HEROKU_APP_NAME

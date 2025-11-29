@@ -1,0 +1,19 @@
+[project]
+name = "conversation_states"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+	"pydantic>=2.0",
+	"langgraph",
+	"langchain-core",
+	"tiktoken"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["conversation_states"]
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

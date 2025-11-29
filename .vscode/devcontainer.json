@@ -1,0 +1,29 @@
+{
+    "name": "Victor AI Development Environment",
+    "forwardPorts": [
+        2024,
+        5000
+    ],
+    "portsAttributes": {
+        "2024": {
+            "label": "Langgraph",
+            "onAutoForward": "openBrowser",
+            "visibility": "public",
+            "protocol": "https",
+            "elevateIfNeeded": true,
+            "requireLocalPort": true
+        },
+        "5000": {
+            "label": "Python App",
+            "onAutoForward": "openBrowser",
+            "visibility": "public",
+            "protocol": "https",
+            "elevateIfNeeded": true,
+            "requireLocalPort": true
+        }
+    },
+    "otherPortsAttributes": {
+        "onAutoForward": "openBrowser",
+        "visibility": "public"
+    }
+}
