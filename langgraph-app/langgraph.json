@@ -19,7 +19,7 @@
     "langgraph-prebuilt==0.1.8",
     "langgraph-runtime-inmem==0.0.11",
     "langgraph-sdk==0.1.66",
-    "langsmith==0.3.29",
+    "langsmith>=0.6.3",
     "tavily-python>=0.5.4",
     "trustcall>=0.0.36",
     "wikipedia>=1.4.0"
