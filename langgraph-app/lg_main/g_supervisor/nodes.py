@@ -89,7 +89,7 @@ def action_assistant(state: InternalState) -> InternalState:
     pass
 
 
-def intro_checker(state: InternalState, writer) -> InternalState:
+def intro_checker(state: InternalState, writer: StreamWriter | None = None) -> InternalState:
     """Check if user message contains #intro hashtag and send reaction."""
     from conversation_states.actions import ActionSender
 
@@ -208,7 +208,7 @@ def no_intro(state: InternalState, writer=None) -> InternalState:
     return state
 
 
-def mention_checker(state: InternalState, writer=None) -> InternalState:
+def mention_checker(state: InternalState, writer: StreamWriter | None = None) -> InternalState:
     """Set state.bot_mentioned based on whether the bot was explicitly addressed."""
     import os
     import re
@@ -217,8 +217,12 @@ def mention_checker(state: InternalState, writer=None) -> InternalState:
     t = text.lower()
 
     # Configurable mention tokens.
-    # Example: BOT_MENTION_TOKENS="victorai,викор,@victorai"
-    raw = os.getenv("BOT_MENTION_TOKENS", "victorai,@victorai,викор").strip()
+    # Example: BOT_MENTION_TOKENS="victorai,викор,@victorai,@victorducoai_bot"
+    # Default includes both the historical project name and the current Telegram bot username.
+    raw = os.getenv(
+        "BOT_MENTION_TOKENS",
+        "victorai,@victorai,викор,victorducoai_bot,@victorducoai_bot",
+    ).strip()
     tokens = [x.strip().lower() for x in raw.split(",") if x.strip()]
 
     mentioned = False
