@@ -20,6 +20,32 @@ def load_categories(state: InternalState) -> InternalState:
     return state
 
 
+def prime_turn(state: InternalState) -> InternalState:
+    """
+    Seed the chat-manager reasoning message history with the current user message
+    exactly once. This lets ToolNode append tool outputs, and the agent can see them
+    on the next iteration without re-sending the user message.
+    """
+    user_text = getattr(state.last_external_message, "content", "") or ""
+    user_name = getattr(state.last_external_message, "name", None) or getattr(state.last_sender, "username", None)
+
+    if not getattr(state, "reasoning_messages", None):
+        state.reasoning_messages = []
+
+    # Only add if this turn isn't already primed.
+    last = state.reasoning_messages_api.last()
+    if last:
+        [m] = last
+        if getattr(m, "type", None) == "human":
+            # Already primed for this turn.
+            return state
+
+    state.reasoning_messages = list(state.reasoning_messages) + [
+        HumanMessage(content=str(user_text), name=user_name),
+    ]
+    return state
+
+
 def _categories_block(state: InternalState) -> str:
     cats = list(getattr(state, "chat_manager_categories", []) or [])
     if not cats:
@@ -33,8 +59,6 @@ def agent(state: InternalState, writer: StreamWriter | None = None) -> InternalS
     - decides whether to call tools
     - after tools are executed, formats a short response
     """
-    user_text = getattr(state.last_external_message, "content", "") or ""
-
     system = SystemMessage(
         content=(
             "You are Chat Manager for a Telegram chat.\n"
@@ -54,8 +78,10 @@ def agent(state: InternalState, writer: StreamWriter | None = None) -> InternalS
     )
 
     model = llm.bind_tools(CHAT_MANAGER_TOOLS)
-    resp = model.invoke([system, HumanMessage(content=str(user_text), name="chat_manager_user")])
+    # Provide full reasoning history (human + prior AI/tool messages) so the model
+    # can decide what to do next after tool outputs.
+    history = list(getattr(state, "reasoning_messages", []) or [])
+    resp = model.invoke([system] + history)
     resp.name = "chat_manager_agent"
-    state.reasoning_messages = [resp]
+    state.reasoning_messages = list(getattr(state, "reasoning_messages", []) or []) + [resp]
     return state
-
