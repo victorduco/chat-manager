@@ -6,7 +6,8 @@
   "graphs": {
     "graph_router": "lg_main.g_command_router.graph:graph_router",
     "graph_supervisor": "lg_main.g_supervisor.graph:graph_supervisor",
-    "graph_dispatcher": "lg_main.g_dispatcher.graph:graph_dispatcher"
+    "graph_dispatcher": "lg_main.g_dispatcher.graph:graph_dispatcher",
+    "graph_chat_manager": "lg_main.g_chat_manager.graph:graph_chat_manager"
   },
   "env": "./.env",
   "python_version": "3.13",

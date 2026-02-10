@@ -1,5 +1,6 @@
 from typing import Optional, Union, Any
 from conversation_states.humans import Human
+from conversation_states.memory import MemoryRecord
 
 
 def add_summary(a: Optional[str], b: Optional[str]) -> Optional[str]:
@@ -60,6 +61,29 @@ def add_user(left: list["Human"], right: list["Human"]) -> list["Human"]:
         except Exception:
             pass
 
+    return left
+
+
+def add_memory_records(left: list["MemoryRecord"], right: list["MemoryRecord"]) -> list["MemoryRecord"]:
+    # Normalize dict payloads from checkpoints.
+    right = [r if isinstance(r, MemoryRecord) else MemoryRecord(**r) for r in right or []]
+
+    by_id = {getattr(r, "id", None): r for r in left or [] if getattr(r, "id", None)}
+    for rr in right:
+        rid = getattr(rr, "id", None)
+        if not rid:
+            # Skip malformed records (should not happen, but don't crash reducers).
+            continue
+        if rid in by_id:
+            # If duplicated, prefer the newer snapshot.
+            existing = by_id[rid]
+            existing.created_at = rr.created_at
+            existing.category = rr.category
+            existing.text = rr.text
+            existing.from_user = rr.from_user
+        else:
+            left.append(rr)
+            by_id[rid] = rr
     return left
 
 

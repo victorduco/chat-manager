@@ -5,8 +5,9 @@ from pydantic.type_adapter import TypeAdapter
 from langchain_core.messages import BaseMessage, RemoveMessage, AnyMessage, AIMessage
 from langgraph.graph import add_messages
 from .humans import Human
+from .memory import MemoryRecord
 from .messages import MessageAPI, count_tokens
-from .utils.reducers import add_user, manage_state
+from .utils.reducers import add_user, add_memory_records, manage_state
 
 
 class InternalState(BaseModel):
@@ -18,6 +19,9 @@ class InternalState(BaseModel):
     users: Annotated[list[Human], add_user] = Field(default_factory=list)
     last_sender: Human
     summary: str = ""
+    memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
+    # Ephemeral routing helper (not persisted to checkpoints).
+    chat_manager_decision: Optional[dict] = Field(default=None, exclude=True)
 
     @property
     def reasoning_messages_api(self) -> MessageAPI:
@@ -38,7 +42,8 @@ class InternalState(BaseModel):
             users=list(external.users),
             external_messages=external.messages,
             last_external_message=last_message,
-            last_sender=sender
+            last_sender=sender,
+            memory_records=list(external.memory_records or []),
         )
 
     @model_validator(mode="before")
@@ -50,6 +55,11 @@ class InternalState(BaseModel):
                     TypeAdapter(AnyMessage).validate_python(m)
                     for m in values[field]
                 ]
+        if "memory_records" in values and values["memory_records"] is not None:
+            values["memory_records"] = [
+                r if isinstance(r, MemoryRecord) else MemoryRecord(**r)
+                for r in values["memory_records"]
+            ]
         return values
 
 
@@ -61,6 +71,7 @@ class ExternalState(BaseModel):
     summary: str = ""
     last_reasoning: Annotated[Optional[list[AnyMessage]],
                               manage_state] = Field(default=None)
+    memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
 
     @property
     def last_reasoning_api(self) -> MessageAPI:
@@ -76,7 +87,8 @@ class ExternalState(BaseModel):
             messages=[assistant_message],
             users=list(internal.users),
             summary=internal.summary,
-            last_reasoning=internal.reasoning_messages
+            last_reasoning=internal.reasoning_messages,
+            memory_records=list(getattr(internal, "memory_records", []) or []),
         )
 
     @model_validator(mode="before")
@@ -87,6 +99,11 @@ class ExternalState(BaseModel):
                 TypeAdapter(AnyMessage).validate_python(m)
                 for m in values["messages"]
             ]
+        if "memory_records" in values and values["memory_records"] is not None:
+            values["memory_records"] = [
+                r if isinstance(r, MemoryRecord) else MemoryRecord(**r)
+                for r in values["memory_records"]
+            ]
         return values
 
     def clear_state(self):
@@ -96,6 +113,7 @@ class ExternalState(BaseModel):
         self.summary = ""
         self.users = []
         self.last_reasoning = []
+        self.memory_records = []
         return
 
     def summarize_overall_state(self) -> str:

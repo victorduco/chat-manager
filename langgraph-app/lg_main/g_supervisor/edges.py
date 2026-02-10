@@ -3,6 +3,12 @@ from conversation_states.states import InternalState
 from langchain_openai import ChatOpenAI
 
 
+def route_after_intro_checker(state: InternalState) -> Literal["intro_responder", "chat_manager"]:
+    current_message_content = getattr(state.last_external_message, "content", "")
+    has_intro_now = isinstance(current_message_content, str) and "#intro" in current_message_content.lower()
+    return "intro_responder" if has_intro_now else "chat_manager"
+
+
 def should_use_profile_tools(state: InternalState) -> Literal["profile_tools", "prepare_external"]:
     [ai_message] = state.reasoning_messages_api.last()
     

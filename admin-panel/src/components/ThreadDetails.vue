@@ -45,6 +45,7 @@
             <option value="">Default (auto)</option>
             <option value="graph_supervisor">graph_supervisor</option>
             <option value="graph_router">graph_router</option>
+            <option value="graph_chat_manager">graph_chat_manager</option>
           </select>
           <span v-if="graphBusy" class="graph-status">Saving...</span>
           <span v-else-if="graphError" class="graph-error">{{ graphError }}</span>

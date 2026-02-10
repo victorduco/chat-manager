@@ -27,5 +27,5 @@ else:
 # Default points to the dispatcher assistant we created earlier.
 DISPATCHER_ASSISTANT_ID = os.getenv(
     "DISPATCHER_ASSISTANT_ID",
-    "89406b05-6585-5eb9-ba79-b8d74de18cd9",
+    "graph_dispatcher",
 )

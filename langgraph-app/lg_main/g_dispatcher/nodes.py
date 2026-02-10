@@ -5,14 +5,17 @@ from typing import Any
 
 from conversation_states.states import ExternalState
 from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import AIMessage
 
 from lg_main.g_command_router.graph import graph_router
 from lg_main.g_supervisor.graph import graph_supervisor
+from lg_main.g_chat_manager.graph import graph_chat_manager
 
 
 _ALLOWED = {
     "graph_router": graph_router,
     "graph_supervisor": graph_supervisor,
+    "graph_chat_manager": graph_chat_manager,
 }
 
 
@@ -36,12 +39,18 @@ def dispatch(state: ExternalState, config: RunnableConfig) -> ExternalState:
     """
     target = _get_dispatch_graph_id(config)
     if not target:
-        # No routing info: intentionally no-op.
+        # No routing info: respond without calling any LLM/tools.
         return ExternalState(
-            messages=[],
+            messages=[
+                AIMessage(
+                    content="Routing is not configured for this thread.",
+                    name="dispatcher_default_no_routing",
+                )
+            ],
             users=list(state.users),
             summary=state.summary,
             last_reasoning=state.last_reasoning,
+            memory_records=list(getattr(state, "memory_records", []) or []),
         )
 
     g = _ALLOWED.get(target)
@@ -56,4 +65,3 @@ def dispatch(state: ExternalState, config: RunnableConfig) -> ExternalState:
 
     # Delegate to the chosen graph. Preserve config so the same thread/checkpointer is used.
     return g.invoke(state, config=config)
-

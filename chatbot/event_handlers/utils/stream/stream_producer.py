@@ -51,20 +51,27 @@ class StreamProducer():
 
     @staticmethod
     async def prep_stream(client, ctx):
+        # New threads default to the dispatcher graph so they are safe-by-default
+        # until per-thread routing (metadata.dispatch_graph_id) is configured.
+        requested_graph_id = "graph_router" if ctx.content_type == "command" else "graph_dispatcher"
+
         thread = await client.threads.create(
             thread_id=ctx.thread_id,
-            graph_id=ctx.get_graph_id(),
-            if_exists="do_nothing"
+            graph_id=requested_graph_id,
+            if_exists="do_nothing",
         )
         dispatch_graph_id = await StreamProducer._get_dispatch_graph_id(client, thread["thread_id"])
         state = ExternalState()
         state.messages = [ctx.message]
         state.users = [ctx.user]
 
-        assistant_id = ctx.get_graph_id()
+        # Preserve legacy behavior for existing threads by using the thread's
+        # configured graph when no dispatch routing is set.
+        assistant_id = thread.get("graph_id") or requested_graph_id
         config = None
-        if dispatch_graph_id and DISPATCHER_ASSISTANT_ID:
-            assistant_id = DISPATCHER_ASSISTANT_ID
+        if dispatch_graph_id:
+            # Force routing through the dispatcher assistant/graph and pass the target.
+            assistant_id = (DISPATCHER_ASSISTANT_ID or "graph_dispatcher")
             config = {"configurable": {"dispatch_graph_id": dispatch_graph_id}}
 
         stream = client.runs.stream(

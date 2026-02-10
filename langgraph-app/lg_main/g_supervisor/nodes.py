@@ -138,13 +138,9 @@ def intro_checker(state: InternalState, writer) -> InternalState:
             # User just completed intro NOW - send heart
             action_sender.send_reaction("❤")
             logging.info(f"Sent ❤ reaction to user {sender.username} - intro completed now")
-        elif sender.intro_completed:
-            # User completed intro before - no reaction
-            logging.info(f"No reaction sent to user {sender.username} - intro was completed before")
         else:
-            # No intro - send thumbs down
-            action_sender.send_reaction("👎")
-            logging.info(f"Sent 👎 reaction to user {sender.username} - no intro")
+            # Non-intro messages are handled by other graphs (e.g. chat_manager).
+            logging.info(f"No intro reaction sent to user {sender.username}")
 
     return state
 
@@ -200,22 +196,21 @@ def prepare_external(state: InternalState) -> ExternalState:
     # Try to get message from intro_responder first
     assistant_messages = state.reasoning_messages_api.last(name="intro_responder")
 
-    # Check if intro_responder was skipped (empty message)
-    if assistant_messages and assistant_messages[0].content == "":
-        # intro_responder skipped - don't send any message
-        # Return empty external state (no message to send)
+    # Otherwise (or when intro_responder skipped), fallback to the latest reasoning message.
+    if not assistant_messages:
+        assistant_messages = state.reasoning_messages_api.last()
+
+    # If last message is an explicit "skip", don't send anything.
+    if assistant_messages and (getattr(assistant_messages[0], "content", None) == ""):
         ext = ExternalState(
             messages=[],
             users=list(state.users),
             summary=state.summary,
-            last_reasoning=state.reasoning_messages
+            last_reasoning=state.reasoning_messages,
+            memory_records=list(getattr(state, "memory_records", []) or []),
         )
-        logging.info("Prepare external: skipped message (intro_responder returned empty)")
+        logging.info("Prepare external: skipped message (empty content)")
         return ext
-
-    # If no intro_responder message, fallback to text_assistant
-    if not assistant_messages:
-        assistant_messages = state.reasoning_messages_api.last(name="text_assistant")
 
     if not assistant_messages:
         # Nothing to send; avoid crashing the run.
@@ -225,6 +220,7 @@ def prepare_external(state: InternalState) -> ExternalState:
             users=list(state.users),
             summary=state.summary,
             last_reasoning=state.reasoning_messages,
+            memory_records=list(getattr(state, "memory_records", []) or []),
         )
 
     [assistant_message] = assistant_messages
