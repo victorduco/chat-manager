@@ -1,5 +1,5 @@
-from _log_utils.meow_httpx import enable_meowx
-from _log_utils.faker.tg_message import generate_fake_context, generate_fake_update
+# from _log_utils.meow_httpx import enable_meowx
+# from _log_utils.faker.tg_message import generate_fake_context, generate_fake_update
 from telegram import Update, ReactionTypeEmoji
 from telegram.ext import ContextTypes
 from event_handlers.utils.stream.stream_producer import StreamProducer

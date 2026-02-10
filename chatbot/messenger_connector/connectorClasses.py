@@ -51,14 +51,21 @@ class TelegramConnector(MessengerConnector):
     async def initialize(self) -> None:
         await self.app.initialize()
         await self.app.start()
-        if getattr(CONFIG, "TELEGRAM_WEBHOOK_URL", None):
-            await self.app.start()
-            await self.app.bot.set_webhook(url=CONFIG.TELEGRAM_WEBHOOK_URL)
-        else:
-            self.app.run_polling()
-            await self.app.bot.set_my_commands(TELEGRAM_COMMANDS, BotCommandScopeDefault())
+
+        # Add handlers first
         for handler in TELEGRAM_HANDLERS:
             self.app.add_handler(handler)
+
+        # Set commands
+        await self.app.bot.set_my_commands(TELEGRAM_COMMANDS, BotCommandScopeDefault())
+
+        # Configure webhook or local mode
+        if getattr(CONFIG, "TELEGRAM_WEBHOOK_URL", None):
+            await self.app.bot.set_webhook(url=CONFIG.TELEGRAM_WEBHOOK_URL)
+            logging.info(f"Webhook set to: {CONFIG.TELEGRAM_WEBHOOK_URL}")
+        else:
+            # In dev mode without webhook, just initialize (webhook will receive updates via HTTP)
+            logging.info("Running in local dev mode - waiting for webhook updates")
 
     async def shutdown(self) -> None:
         await self.app.stop()

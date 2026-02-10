@@ -1,6 +1,10 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv(dotenv_path='/workspaces/agent-taskmanager/.env')
+
+# Load .env from project root
+project_root = Path(__file__).parent.parent.parent
+load_dotenv(dotenv_path=project_root / '.env')
 
 DEV_ENV = False if os.getenv("HEROKU_APP_NAME") else True
 
