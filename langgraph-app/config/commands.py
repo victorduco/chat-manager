@@ -22,6 +22,13 @@ COMMANDS = {
         "node_prep": "show_all_users_prep",
         "node_action": "show_all_users"
     },
+    "set_intro_status": {
+        "command": "/set_intro_status",
+        "description": "Set intro status for a user (admin only). Usage: /set_intro_status <@username|telegram:ID|ID|all> <done|pending>",
+        "admin_only": True,
+        "node_prep": "set_intro_status_prep",
+        "node_action": "set_intro_status",
+    },
     # Legacy commands - can be removed later
     # "clear_context": {
     #     "command": "/clear_context",
