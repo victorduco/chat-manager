@@ -116,11 +116,17 @@ class StreamProducer():
     def get_chunk_text(self, data):
         try:
             content = data[0]["content"]
+            msg_type = data[0].get("type")
             node = data[1]["langgraph_node"]
             # todo check what id to use
             message_id = data[1]["run_id"]
 
         except (KeyError, IndexError, TypeError, AttributeError):
+            return False
+
+        # Only forward assistant text. Tool/human/system messages are internal and
+        # can contain tool ids / intermediate state.
+        if msg_type != "ai":
             return False
 
         # Skip metadata nodes
