@@ -1,6 +1,7 @@
 {
   "dockerfile_lines": [
-    "COPY . /deps/langgraph-app"
+    "COPY langgraph-app /deps/langgraph-app",
+    "COPY libs/conversation_states /deps/conversation_states"
   ],
   "graphs": {
     "graph_router": "lg_main.g_command_router.graph:graph_router",

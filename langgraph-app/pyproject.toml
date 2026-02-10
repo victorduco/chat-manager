@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "langgraph-app"
 version = "0.1.0"
@@ -22,3 +26,8 @@ dependencies = [
     "wikipedia>=1.4.0",
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+# Keep the runtime surface area tight so editable installs inside containers are deterministic.
+include = ["lg_main*", "tool_sets*", "prompt_templates*", "testing_utils*"]
+exclude = ["backup*"]

@@ -87,7 +87,7 @@ docker buildx build \
     --provenance=false \
     --sbom=false \
     --load \
-    .
+    "$PROJECT_ROOT"
 
 # Sanity check: ensure the local image is amd64 (Heroku runtime).
 IMG_ARCH="$(docker image inspect "$TAG" --format '{{.Architecture}}' 2>/dev/null || true)"
