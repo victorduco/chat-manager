@@ -130,9 +130,8 @@ def intro_checker(state: InternalState, writer) -> InternalState:
             action_sender.send_reaction("❤")
             logging.info(f"Sent ❤ reaction to user {sender.username} - intro completed now")
         elif has_intro_before or sender.intro_completed:
-            # User completed intro before - send thumbs up
-            action_sender.send_reaction("👍")
-            logging.info(f"Sent 👍 reaction to user {sender.username} - intro was completed before")
+            # User completed intro before - no reaction
+            logging.info(f"No reaction sent to user {sender.username} - intro was completed before")
         else:
             # No intro - send thumbs down
             action_sender.send_reaction("👎")
