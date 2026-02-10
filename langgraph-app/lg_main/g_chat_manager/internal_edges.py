@@ -14,4 +14,3 @@ def should_use_tools(state: InternalState) -> Literal["tools", "__end__"]:
     if tool_calls:
         return "tools"
     return "__end__"
-

@@ -26,6 +26,4 @@ builder.add_conditional_edges("agent", should_use_tools)
 # After tools, return to the agent so it can read tool outputs and decide next step.
 builder.add_edge("tools", "agent")
 
-builder.add_edge("agent", END)
-
 graph_chat_manager_internal = builder.compile()
