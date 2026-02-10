@@ -89,7 +89,9 @@ def action_assistant(state: InternalState) -> InternalState:
 
 
 def intro_checker(state: InternalState) -> InternalState:
-    """Check if user message contains #intro hashtag."""
+    """Check if user message contains #intro hashtag and send reaction."""
+    from conversation_states.actions import ActionSender
+
     sender = state.last_sender
 
     # If no sender, skip
@@ -103,14 +105,29 @@ def intro_checker(state: InternalState) -> InternalState:
     ]
 
     # Check if any message contains #intro hashtag
+    has_intro = False
     for msg in user_messages:
         content = getattr(msg, 'content', '')
         if isinstance(content, str) and '#intro' in content.lower():
+            has_intro = True
             # Mark intro as completed for this user
             if not sender.intro_completed:
                 sender.intro_completed = True
                 logging.info(f"User {sender.username} completed intro with hashtag #intro")
             break
+
+    # Send reaction based on intro status
+    writer = state.get("writer")
+    if writer:
+        action_sender = ActionSender(writer)
+        if has_intro or sender.intro_completed:
+            # User has intro - send thumbs up
+            action_sender.send_reaction("👍")
+            logging.info(f"Sent 👍 reaction to user {sender.username}")
+        else:
+            # No intro - send thumbs down
+            action_sender.send_reaction("👎")
+            logging.info(f"Sent 👎 reaction to user {sender.username}")
 
     return state
 
