@@ -9,6 +9,7 @@ class Human(BaseModel):
     preferred_name: Optional[str] = None
     information: Dict = Field(default_factory=dict)
     intro_completed: bool = False  # Track if user has written intro
+    telegram_id: Optional[int] = None  # Telegram user ID for permissions
 
     def update_info(self, updates: dict[str, str] | list[dict[str, str]]) -> None:
         if isinstance(updates, dict):
