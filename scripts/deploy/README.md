@@ -45,9 +45,9 @@ Deploys the LangGraph app to Heroku using Docker containers and LangGraph CLI.
 **What it does:**
 1. Verifies required tools (Heroku CLI, Docker, LangGraph CLI)
 2. Logs in to Heroku Container Registry
-3. Uses `langgraph build` to create a Docker image
-4. Tags the image for Heroku registry
-5. Pushes the image to Heroku
+3. Generates a Dockerfile via `langgraph dockerfile`
+4. Builds a single-platform `linux/amd64` image and `--load`s it into the local Docker engine
+5. Pushes the image to Heroku (single image manifest; avoids manifest lists)
 6. Releases the image on Heroku
 
 **Requirements:**
@@ -141,7 +141,7 @@ pip install -U langgraph-cli
 
 # Check LangGraph configuration
 cd langgraph-app
-langgraph build --help
+langgraph dockerfile --help
 ```
 
 ## Monitoring

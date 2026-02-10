@@ -1,5 +1,7 @@
 {
-  "dockerfile_lines": [],
+  "dockerfile_lines": [
+    "COPY . /deps/langgraph-app"
+  ],
   "graphs": {
     "graph_router": "lg_main.g_command_router.graph:graph_router",
     "graph_supervisor": "lg_main.g_supervisor.graph:graph_supervisor"

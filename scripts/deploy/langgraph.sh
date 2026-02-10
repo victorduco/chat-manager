@@ -55,18 +55,56 @@ fi
 echo "🔐 Logging in to Heroku Container Registry..."
 heroku container:login
 
-# Build Docker image using LangGraph CLI for linux/amd64 (Heroku platform)
+# Build Docker image for Heroku (linux/amd64) without producing a manifest list.
+#
+# On Apple Silicon, build tooling can easily produce an OCI index / Docker manifest list.
+# Heroku Container Registry expects a single-image manifest (Docker schema2), so we:
+# 1) generate a Dockerfile from langgraph.json
+# 2) build a single-platform linux/amd64 image and --load it into the local Docker engine
+# 3) push with docker (pushes a single manifest, not a list)
 echo "🏗️  Building LangGraph Docker image for linux/amd64..."
-langgraph build --tag "registry.heroku.com/$HEROKU_APP_NAME/web" --platform linux/amd64
 
-# Verify the image was built
-if ! docker images "registry.heroku.com/$HEROKU_APP_NAME/web" | grep -q web; then
-    echo "❌ Error: Docker image was not built successfully"
+TAG="registry.heroku.com/$HEROKU_APP_NAME/web"
+TMP_DOCKERFILE="$(mktemp -t langgraph.Dockerfile.XXXXXX)"
+cleanup() {
+    rm -f "$TMP_DOCKERFILE"
+}
+trap cleanup EXIT
+
+if ! langgraph dockerfile "$TMP_DOCKERFILE"; then
+    echo "❌ Error: Failed to generate Dockerfile via 'langgraph dockerfile'"
+    echo "Make sure you have a recent LangGraph CLI installed: pip install -U langgraph-cli"
     exit 1
 fi
 
-echo "📦 Docker images:"
-docker images "registry.heroku.com/$HEROKU_APP_NAME/web"
+# Build and load a single-platform image into the local engine.
+# Disable default attestations (they can introduce extra manifest/metadata objects).
+export BUILDX_NO_DEFAULT_ATTESTATIONS=1
+docker buildx build \
+    --platform linux/amd64 \
+    -f "$TMP_DOCKERFILE" \
+    -t "$TAG" \
+    --provenance=false \
+    --sbom=false \
+    --load \
+    .
+
+# Sanity check: ensure the local image is amd64 (Heroku runtime).
+IMG_ARCH="$(docker image inspect "$TAG" --format '{{.Architecture}}' 2>/dev/null || true)"
+if [[ "$IMG_ARCH" != "amd64" ]]; then
+    echo "❌ Error: Built image architecture is '$IMG_ARCH' (expected: amd64)"
+    echo "Try updating Docker Desktop, enabling emulation, or ensuring buildx is set up correctly."
+    exit 1
+fi
+
+# Verify the image exists locally (avoid parsing 'docker images' output).
+if ! docker image inspect "$TAG" &> /dev/null; then
+    echo "❌ Error: Docker image tag '$TAG' not found after build"
+    exit 1
+fi
+
+echo "📦 Docker image:"
+docker image ls "$TAG" --format 'table {{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}'
 
 # Push Docker image to Heroku
 echo "📤 Pushing Docker image to Heroku..."
