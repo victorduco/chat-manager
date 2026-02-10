@@ -63,7 +63,7 @@ def update_user_info(
     >>> update_user_info(fields=[{"married": ""}]) // if user said "I'm not married anymore"
     True
 
-    >>> update_user_info(fields=[{"food preferences": "Italian, Pizza"}]) // It was {"food preferences": "Italian"} and user said "Hey Alex, want to grab pizza tonight?"
+    >>> update_user_info(fields=[{"food preferences": "Italian, Pizza"}]) // It was {"food preferences": "Italian"} and user said "Hey Alex, want to grab pizza tonight?" 
     True
     """
     try:
@@ -71,33 +71,6 @@ def update_user_info(
         if not sender:
             return False
         sender.update_info(fields)
-        return True
-    except Exception:
-        return False
-
-
-@tool
-def mark_intro_completed(
-    state: Annotated[InternalState, InjectedState]
-) -> bool:
-    """
-    Mark that the user has completed their introduction.
-
-    Call this tool when the user provides their introduction (tells about themselves,
-    their interests, background, etc.).
-
-    Output:
-    - True | False — Success or not
-
-    Examples:
-    >>> mark_intro_completed()
-    True
-    """
-    try:
-        sender = state.last_sender
-        if not sender:
-            return False
-        sender.intro_completed = True
         return True
     except Exception:
         return False

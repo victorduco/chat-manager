@@ -8,6 +8,7 @@ class Human(BaseModel):
     last_name: Optional[str] = None
     preferred_name: Optional[str] = None
     information: Dict = Field(default_factory=dict)
+    intro_completed: bool = False  # Track if user has written intro
 
     def update_info(self, updates: dict[str, str] | list[dict[str, str]]) -> None:
         if isinstance(updates, dict):

@@ -63,44 +63,29 @@ class PromptBuilder(BaseModel):
         else:
             multiuser_note = ""
 
-        # Check if intro is completed
-        intro_status = "completed" if self.sender.intro_completed else "not completed"
-
-        if not self.sender.intro_completed:
-            intro_instruction = """4. **IMPORTANT**: If the user's message appears to be an introduction (they share about themselves, their interests, background, what they do, etc.), call the mark_intro_completed() tool.
-    Examples of introductions:
-    - "I'm a software engineer from Berlin, love hiking and photography"
-    - "Hey, I'm Alex. I work in design and I'm really into AI and cooking"
-    - User shares 2+ personal facts about themselves in a single message
-    5. You may call multiple tools or the same tool multiple times if needed.
-    6. Your message is not visible to the sender so you can call the tools or send an empty message if there's nothing to update."""
-        else:
-            intro_instruction = """4. You may call multiple tools or the same tool multiple times if needed.
-    5. Your message is not visible to the sender so you can call the tools or send an empty message if there's nothing to update."""
-
         # === PREFIX WITH VARIABLES ===
         prefix_template = """You are an assistant that updates a user's profile based on their latest message.
     IMPORTANT! Don't answer the user. Don't call tools if there's nothing to update.
 
     ---
     Sender: {username}
-    Intro status: {intro_status}
     ---
 
     Your job is to:
     1. Extract new and meaningful personal information (e.g. location, job, relationships, interests, preferred style of communication, language, food) that can be used in further conversations.
     2. {info_section}
     3. {preferred_name_section}
-    {intro_instruction}
-
+    4. You may call multiple tools or the same tool multiple times if needed.
+    5. Your message is not visible to the sender so you can call the tools or send an empty message if there's nothing to update.
+    
     {multiuser_note}
-
+    
     ---
 
     You need to analyse these messages from the user:
-
+    
     {external_messages}
-
+    
     ---
 
     The following are fictional examples of how to extract and update information:
@@ -113,10 +98,6 @@ class PromptBuilder(BaseModel):
             {
                 "user": "Hey guys, do you know open UX designer positions in Lisbon?",
                 "bot": 'Tool Call: update_user_info(fields=[{{"location": "Lisbon"}}, {{"profession": "UX designer"}}])'
-            },
-            {
-                "user": "I'm Alex from Berlin, software engineer, love hiking and photography",
-                "bot": 'Tool Call: update_user_info(fields=[{{"location": "Berlin"}}, {{"profession": "software engineer"}}, {{"interests": "hiking, photography"}}])\nTool Call: mark_intro_completed()'
             },
             {
                 "user": "I'm not married anymore",
@@ -147,10 +128,8 @@ class PromptBuilder(BaseModel):
             input_variables=["input"],
             partial_variables={
                 "username": self.sender.username,
-                "intro_status": intro_status,
                 "info_section": info_section.strip(),
                 "preferred_name_section": preferred_name_section.strip(),
-                "intro_instruction": intro_instruction.strip(),
                 "multiuser_note": multiuser_note.strip(),
                 "external_messages": self.trimmed_ext_messages
             }

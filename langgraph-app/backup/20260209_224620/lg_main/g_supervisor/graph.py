@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, END, START
 from conversation_states.states import ExternalState, InternalState
 from langgraph.prebuilt import ToolNode
 from .edges import should_summarize, should_use_profile_tools, route_actions
-from .nodes import text_assistant, action_assistant, prepare_external, user_check, instruction_builder, profile_tools, proceed_to_assistants, prepare_internal, intro_checker
+from .nodes import text_assistant, action_assistant, prepare_external, user_check, instruction_builder, profile_tools, proceed_to_assistants, prepare_internal
 
 
 # Build graph
@@ -12,7 +12,6 @@ builder.add_node("instruction_builder", instruction_builder)
 builder.add_node("proceed_to_assistants", lambda state: state)
 builder.add_node("text_assistant", text_assistant)
 builder.add_node("action_assistant", action_assistant)
-builder.add_node("intro_checker", intro_checker)
 builder.add_node("user_check", user_check)
 builder.add_node("profile_tools", ToolNode(
     profile_tools, messages_key="reasoning_messages"))
@@ -30,9 +29,8 @@ builder.add_conditional_edges(
     route_actions  # text_assistant or/and action_assistant
 )
 
-builder.add_edge("text_assistant", "intro_checker")
-builder.add_edge("action_assistant", "intro_checker")
-builder.add_edge("intro_checker", "user_check")
+builder.add_edge("text_assistant", "user_check")
+builder.add_edge("action_assistant", "user_check")
 builder.add_conditional_edges(
     "user_check",
     should_use_profile_tools
