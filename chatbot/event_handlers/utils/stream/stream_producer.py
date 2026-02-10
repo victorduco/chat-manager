@@ -56,8 +56,6 @@ class StreamProducer():
         # run stream
         try:
             async for chunk in self.stream:
-                logging.info(f"Stream chunk event: {chunk.event}")
-                logging.info(f"Stream chunk data: {chunk.data}")
                 if chunk.event == "messages":
                     await self.queue_message(chunk.data)
                 if chunk.event == "custom":
@@ -77,7 +75,7 @@ class StreamProducer():
                              self.queue.actions.put(None))
 
     async def queue_message(self, data):
-        queue_chunk = self.get_chunk_text(data, "text_assistant")
+        queue_chunk = self.get_chunk_text(data)
         if queue_chunk:
             if queue_chunk != "":
                 await self.queue.messages.put(queue_chunk)
@@ -88,7 +86,7 @@ class StreamProducer():
         await self.queue.actions.put(action)
         pass
 
-    def get_chunk_text(self, data, streamed_node):
+    def get_chunk_text(self, data):
         try:
             content = data[0]["content"]
             node = data[1]["langgraph_node"]
@@ -97,8 +95,11 @@ class StreamProducer():
 
         except (KeyError, IndexError, TypeError, AttributeError):
             return False
-        if node not in [streamed_node, "tmp"]:
+
+        # Skip metadata nodes
+        if node in ["__start__", "__end__"]:
             return False
+
         queue_chunk = MessageContent(
             message_id=message_id, chunk=content)
         return queue_chunk
