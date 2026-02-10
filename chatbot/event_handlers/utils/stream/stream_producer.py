@@ -1,4 +1,4 @@
-from server.config import LANGGRAPH_API_URL, DISPATCHER_ASSISTANT_ID
+from server.config import LANGGRAPH_API_URL
 from typing import AsyncIterator, Union
 from langgraph_sdk import get_client
 from langgraph_sdk.client import LangGraphClient
@@ -65,14 +65,10 @@ class StreamProducer():
         state.messages = [ctx.message]
         state.users = [ctx.user]
 
-        # Preserve legacy behavior for existing threads by using the thread's
-        # configured graph when no dispatch routing is set.
-        assistant_id = thread.get("graph_id") or requested_graph_id
+        # If per-thread routing is configured, run that graph directly.
+        # This preserves StreamWriter/custom events (reactions, actions) inside the target graph.
+        assistant_id = dispatch_graph_id or (thread.get("graph_id") or requested_graph_id)
         config = None
-        if dispatch_graph_id:
-            # Force routing through the dispatcher assistant/graph and pass the target.
-            assistant_id = (DISPATCHER_ASSISTANT_ID or "graph_dispatcher")
-            config = {"configurable": {"dispatch_graph_id": dispatch_graph_id}}
 
         stream = client.runs.stream(
             thread_id=thread["thread_id"],
