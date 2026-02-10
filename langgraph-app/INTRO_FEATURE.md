@@ -71,10 +71,12 @@ The `user_check` prompt now includes:
 - Call `mark_intro_completed()` when user shares their intro
 
 **What counts as an intro:**
+- Message contains the #intro hashtag, OR
 - User shares 2+ personal facts in one message
 - Examples:
   - "I'm a software engineer from Berlin, love hiking"
   - "Hey, I'm Alex. I work in design and I'm into AI"
+  - "#intro I'm Max from Tokyo"
 
 ## User Flow Example
 
@@ -103,6 +105,10 @@ Bot: "У меня все отлично! By the way, I'd love to know more
 
 User: "Я из Москвы, работаю программистом, люблю читать"
 Bot: "Круто! ..."
+[Calls: mark_intro_completed()]
+
+User: "#intro I'm a developer"
+Bot: "Nice to meet you! ..."
 [Calls: mark_intro_completed()]
 ```
 

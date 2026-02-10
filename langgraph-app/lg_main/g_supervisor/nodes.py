@@ -1,5 +1,5 @@
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from tool_sets.user_profile import set_preferred_name, update_user_info, mark_intro_completed
+from tool_sets.user_profile import set_preferred_name, update_user_info, mark_intro_completed, send_user_reaction
 from prompt_templates.prompt_builder import PromptBuilder
 from langchain_core.messages import RemoveMessage, SystemMessage
 from conversation_states.states import ExternalState, InternalState
@@ -14,7 +14,7 @@ load_dotenv()
 
 llm = ChatOpenAI(model="gpt-4.1-2025-04-14")
 
-profile_tools = [set_preferred_name, update_user_info, mark_intro_completed]
+profile_tools = [set_preferred_name, update_user_info, mark_intro_completed, send_user_reaction]
 
 
 def prepare_internal(state: ExternalState) -> InternalState:

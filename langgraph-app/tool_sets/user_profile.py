@@ -101,3 +101,63 @@ def mark_intro_completed(
         return True
     except Exception:
         return False
+
+
+@tool
+def send_user_reaction(
+    reaction_type: str,
+    state: Annotated[InternalState, InjectedState]
+) -> bool:
+    """
+    Send a reaction emoji to the user's message.
+
+    Args:
+    - reaction_type: str - The type of reaction to send. Options: "like" (👍), "dislike" (👎), "heart" (❤), "fire" (🔥), "thinking" (🤔), "laugh" (🤣), "clap" (👏), "celebrate" (🎉)
+
+    Use this when you want to acknowledge the user's message with an emoji reaction.
+    This is useful for showing emotional response without sending a text message.
+
+    Output:
+    - True | False — Success or not
+
+    Examples:
+    >>> send_user_reaction(reaction_type="like")
+    True
+
+    >>> send_user_reaction(reaction_type="heart")
+    True
+
+    >>> send_user_reaction(reaction_type="thinking")
+    True
+    """
+    from conversation_states.actions import ActionSender, Action
+    from langgraph.types import StreamWriter
+
+    reaction_map = {
+        "like": "👍",
+        "dislike": "👎",
+        "heart": "❤",
+        "fire": "🔥",
+        "thinking": "🤔",
+        "laugh": "🤣",
+        "clap": "👏",
+        "celebrate": "🎉"
+    }
+
+    try:
+        # Get the writer from state
+        writer = state.get("writer")
+        if not writer:
+            return False
+
+        # Get the reaction emoji
+        reaction = reaction_map.get(reaction_type)
+        if not reaction:
+            return False
+
+        # Send the reaction
+        sender = ActionSender(writer)
+        sender.send_reaction(reaction)
+        return True
+    except Exception:
+        return False

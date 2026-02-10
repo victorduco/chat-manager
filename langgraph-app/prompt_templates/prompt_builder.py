@@ -67,10 +67,14 @@ class PromptBuilder(BaseModel):
         intro_status = "completed" if self.sender.intro_completed else "not completed"
 
         if not self.sender.intro_completed:
-            intro_instruction = """4. **IMPORTANT**: If the user's message appears to be an introduction (they share about themselves, their interests, background, what they do, etc.), call the mark_intro_completed() tool.
+            intro_instruction = """4. **IMPORTANT**: If the user's message appears to be an introduction, call the mark_intro_completed() tool.
+    An introduction is detected when:
+    - The message contains the #intro hashtag, OR
+    - The user shares about themselves, their interests, background, what they do, etc.
     Examples of introductions:
     - "I'm a software engineer from Berlin, love hiking and photography"
     - "Hey, I'm Alex. I work in design and I'm really into AI and cooking"
+    - "#intro I'm Max from Tokyo"
     - User shares 2+ personal facts about themselves in a single message
     5. You may call multiple tools or the same tool multiple times if needed.
     6. Your message is not visible to the sender so you can call the tools or send an empty message if there's nothing to update."""
