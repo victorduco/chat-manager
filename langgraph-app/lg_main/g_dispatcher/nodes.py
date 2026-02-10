@@ -24,7 +24,9 @@ def _get_dispatch_graph_id(config: RunnableConfig | None) -> str | None:
         return None
     cfg = config.get("configurable") or {}
     # The assistant can set a default in its config, and callers can override per-run.
-    for k in ("dispatch_graph_id", "target_graph_id", "graph_id"):
+    # NOTE: do NOT look at generic keys like `graph_id` here; the LangGraph runtime
+    # injects them and they'd incorrectly be treated as a dispatch target.
+    for k in ("dispatch_graph_id", "target_graph_id"):
         v = cfg.get(k)
         if isinstance(v, str) and v.strip():
             return v.strip()
