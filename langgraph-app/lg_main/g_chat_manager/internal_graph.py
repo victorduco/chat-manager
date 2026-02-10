@@ -1,22 +1,17 @@
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.prebuilt import ToolNode
 
 from conversation_states.states import InternalState
-from tool_sets.chat_memory import add_memory_record, list_memory_records
-
 from .internal_edges import should_use_tools
-from .internal_nodes import agent, load_categories, prime_turn
+from .internal_nodes import agent, load_categories, prime_turn, run_tools
 
-
-_tools_node = ToolNode([add_memory_record, list_memory_records], messages_key="reasoning_messages")
 
 builder = StateGraph(InternalState)
 builder.add_node("load_categories", load_categories)
 builder.add_node("prime_turn", prime_turn)
 builder.add_node("agent", agent)
-builder.add_node("tools", _tools_node)
+builder.add_node("tools", run_tools)
 
 builder.add_edge(START, "load_categories")
 builder.add_edge("load_categories", "prime_turn")

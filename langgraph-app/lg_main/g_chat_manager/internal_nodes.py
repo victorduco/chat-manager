@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
+
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.types import StreamWriter
+from langchain_core.messages import ToolMessage
 
 from conversation_states.states import InternalState
 from tool_sets.chat_memory import _get_unique_categories_impl
+from tool_sets.chat_memory import _add_memory_record_impl, _list_memory_records_impl
 from tool_sets.chat_memory import add_memory_record, list_memory_records
 
 
@@ -84,4 +88,55 @@ def agent(state: InternalState, writer: StreamWriter | None = None) -> InternalS
     resp = model.invoke([system] + history)
     resp.name = "chat_manager_agent"
     state.reasoning_messages = list(getattr(state, "reasoning_messages", []) or []) + [resp]
+    return state
+
+
+def run_tools(state: InternalState) -> InternalState:
+    """
+    Execute tool calls from the last AIMessage and append ToolMessages.
+
+    We intentionally do NOT rely on ToolNode mutating the state via InjectedState,
+    because those side effects are not guaranteed to persist. Instead we perform
+    state updates explicitly here.
+    """
+    last = state.reasoning_messages_api.last()
+    if not last:
+        return state
+    [msg] = last
+    tool_calls = getattr(msg, "tool_calls", None) or []
+    if not tool_calls:
+        return state
+
+    out_msgs: list[ToolMessage] = []
+    for call in tool_calls:
+        name = call.get("name")
+        args = call.get("args") or {}
+        call_id = call.get("id")
+        if not isinstance(name, str) or not call_id:
+            continue
+
+        if name == "add_memory_record":
+            category = str(args.get("category") or "")
+            text = str(args.get("text") or "")
+            rec_id = _add_memory_record_impl(state=state, category=category, text=text)
+            out_msgs.append(ToolMessage(content=str(rec_id), name=name, tool_call_id=call_id))
+            # keep categories list fresh for the next agent step
+            state.chat_manager_categories = _get_unique_categories_impl(state=state)
+            continue
+
+        if name == "list_memory_records":
+            rows = _list_memory_records_impl(state=state)
+            # JSON so the agent can format a short list safely.
+            out_msgs.append(
+                ToolMessage(
+                    content=json.dumps(rows, ensure_ascii=False),
+                    name=name,
+                    tool_call_id=call_id,
+                )
+            )
+            continue
+
+        out_msgs.append(ToolMessage(content=f"Unsupported tool: {name}", name=name, tool_call_id=call_id))
+
+    state.reasoning_messages = list(getattr(state, "reasoning_messages", []) or []) + out_msgs
     return state
