@@ -192,6 +192,57 @@ def intro_responder(state: InternalState) -> InternalState:
     return state
 
 
+def no_intro(state: InternalState, writer=None) -> InternalState:
+    """If intro not completed and current message isn't an intro, react 👎 and exit."""
+    from conversation_states.actions import ActionSender
+
+    if writer:
+        try:
+            ActionSender(writer).send_reaction("👎")
+        except Exception:
+            pass
+
+    # No text response.
+    response = SystemMessage(content="", name="no_intro_skip")
+    state.reasoning_messages = [response]
+    return state
+
+
+def mention_checker(state: InternalState, writer=None) -> InternalState:
+    """Set state.bot_mentioned based on whether the bot was explicitly addressed."""
+    import os
+    import re
+
+    text = getattr(state.last_external_message, "content", "") or ""
+    t = text.lower()
+
+    # Configurable mention tokens.
+    # Example: BOT_MENTION_TOKENS="victorai,викор,@victorai"
+    raw = os.getenv("BOT_MENTION_TOKENS", "victorai,@victorai,викор").strip()
+    tokens = [x.strip().lower() for x in raw.split(",") if x.strip()]
+
+    mentioned = False
+    for tok in tokens:
+        if not tok:
+            continue
+        if tok.startswith("@"):
+            if tok in t:
+                mentioned = True
+                break
+        else:
+            # Word-ish match to reduce false positives.
+            if re.search(rf"(?<!\\w){re.escape(tok)}(?!\\w)", t):
+                mentioned = True
+                break
+
+    state.bot_mentioned = bool(mentioned)
+
+    # No output; routing happens via conditional edges.
+    response = SystemMessage(content="", name="mention_checker")
+    state.reasoning_messages = [response]
+    return state
+
+
 def prepare_external(state: InternalState) -> ExternalState:
     # Try to get message from intro_responder first
     assistant_messages = state.reasoning_messages_api.last(name="intro_responder")

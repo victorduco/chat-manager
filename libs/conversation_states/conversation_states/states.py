@@ -22,6 +22,7 @@ class InternalState(BaseModel):
     memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
     # Ephemeral routing helper (not persisted to checkpoints).
     chat_manager_decision: Optional[dict] = Field(default=None, exclude=True)
+    bot_mentioned: bool = Field(default=False, exclude=True)
 
     @property
     def reasoning_messages_api(self) -> MessageAPI:

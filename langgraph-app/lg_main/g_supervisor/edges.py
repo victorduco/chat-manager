@@ -3,10 +3,23 @@ from conversation_states.states import InternalState
 from langchain_openai import ChatOpenAI
 
 
-def route_after_intro_checker(state: InternalState) -> Literal["intro_responder", "chat_manager"]:
+def route_after_intro_checker(state: InternalState) -> Literal["intro_responder", "no_intro", "mention_checker"]:
     current_message_content = getattr(state.last_external_message, "content", "")
     has_intro_now = isinstance(current_message_content, str) and "#intro" in current_message_content.lower()
-    return "intro_responder" if has_intro_now else "chat_manager"
+    if has_intro_now:
+        return "intro_responder"
+
+    sender = getattr(state, "last_sender", None)
+    intro_completed = bool(getattr(sender, "intro_completed", False)) if sender else False
+    # If user has not completed intro and current message is not an intro, react and exit.
+    if not intro_completed:
+        return "no_intro"
+
+    return "mention_checker"
+
+
+def route_after_mention_checker(state: InternalState) -> Literal["chat_manager", "prepare_external"]:
+    return "chat_manager" if bool(getattr(state, "bot_mentioned", False)) else "prepare_external"
 
 
 def should_use_profile_tools(state: InternalState) -> Literal["profile_tools", "prepare_external"]:
