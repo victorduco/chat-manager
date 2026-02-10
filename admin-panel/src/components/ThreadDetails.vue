@@ -54,7 +54,12 @@
         <button class="import-btn" @click="importOpen = !importOpen">
           {{ importOpen ? 'Hide' : 'Paste' }} YAML
         </button>
-        <button class="delete-btn" :disabled="deleteBusy" @click="onDeleteThread">
+        <button
+          class="delete-btn"
+          :disabled="deleteBusy || deleteBlockedByUsers"
+          :title="deleteBlockedByUsers ? 'Deletion is disabled for threads with more than 5 users.' : ''"
+          @click="onDeleteThread"
+        >
           {{ deleteBusy ? 'Deleting...' : 'Delete Thread' }}
         </button>
         <span v-if="importStatus" class="import-status">{{ importStatus }}</span>
@@ -107,6 +112,13 @@
           @click="activeTab = 'messages'"
         >
           💬 Messages ({{ messages.length }})
+        </button>
+        <button
+          class="tab"
+          :class="{ active: activeTab === 'records' }"
+          @click="activeTab = 'records'"
+        >
+          🧠 Records ({{ memoryRecords.length }})
         </button>
       </div>
 
@@ -198,6 +210,43 @@
           </div>
         </div>
       </div>
+
+      <!-- Records Tab -->
+      <div v-show="activeTab === 'records'" class="tab-content">
+        <div v-if="memoryRecords.length === 0" class="no-data">
+          No records found in this thread
+        </div>
+
+        <div v-else class="records-container">
+          <table class="records-table">
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Category</th>
+                <th>Text</th>
+                <th>From</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, index) in memoryRecords" :key="r.id || index">
+                <td class="records-created">
+                  {{ formatDateTime(r.created_at) }}
+                </td>
+                <td class="records-category">
+                  <code>{{ r.category || '—' }}</code>
+                </td>
+                <td class="records-text">
+                  {{ r.text || '' }}
+                </td>
+                <td class="records-from">
+                  <span v-if="r.from_user?.username">@{{ r.from_user.username }}</span>
+                  <span v-else class="na">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -245,6 +294,22 @@ const users = computed(() => {
 const messages = computed(() => {
   if (!state.value?.values?.messages) return []
   return state.value.values.messages
+})
+
+const memoryRecords = computed(() => {
+  const raw = state.value?.values?.memory_records
+  const arr = Array.isArray(raw) ? raw.slice() : []
+  // Most recent first (best-effort).
+  arr.sort((a, b) => {
+    const ta = Date.parse(a?.created_at || '') || 0
+    const tb = Date.parse(b?.created_at || '') || 0
+    return tb - ta
+  })
+  return arr
+})
+
+const deleteBlockedByUsers = computed(() => {
+  return users.value.length > 5
 })
 
 async function loadThreadState() {
@@ -419,6 +484,10 @@ async function onImportYaml() {
 async function onDeleteThread() {
   if (!props.threadId) return
   if (deleteBusy.value) return
+  if (deleteBlockedByUsers.value) {
+    error.value = 'Delete is disabled for threads with more than 5 users.'
+    return
+  }
 
   const ok = window.confirm(`Delete thread ${props.threadId}?\n\nThis cannot be undone.`)
   if (!ok) return
@@ -509,6 +578,35 @@ watch(() => props.threadId, (newId) => {
   gap: 0.75rem;
   padding: 0.5rem 1rem 0.75rem 1rem;
   flex-wrap: wrap;
+}
+
+.records-container {
+  padding: 0.75rem 1rem 1rem 1rem;
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.records-table th,
+.records-table td {
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  vertical-align: top;
+}
+
+.records-created {
+  white-space: nowrap;
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+
+.records-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .graph-config {
