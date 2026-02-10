@@ -7,7 +7,6 @@
   "env": "./.env",
   "python_version": "3.13",
   "dependencies": [
-    "conversation-states",
     "langchain>=0.3.23",
     "langchain-community>=0.3.21",
     "langchain-core>=0.3.54",
