@@ -28,6 +28,35 @@ cd chatbot && uv run python main.py                      # Terminal 2
 - **langgraph-app/** - LangGraph AI workflows (OpenAI GPT-4)
 - **libs/conversation_states/** - Shared state management library
 
+## Deployment
+
+Deploy to Heroku using local scripts:
+
+```bash
+# Deploy everything
+./scripts/deploy/deploy.sh all
+
+# Deploy only chatbot
+./scripts/deploy/deploy.sh chatbot
+
+# Deploy only LangGraph app
+./scripts/deploy/deploy.sh langgraph
+```
+
+**Prerequisites:**
+- [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli) installed
+- [Docker](https://docs.docker.com/get-docker/) installed (for LangGraph deployment)
+- [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/) installed: `pip install -U langgraph-cli`
+- Logged in to Heroku: `heroku login`
+
+**Environment variables:**
+- `HEROKU_BOT_NAME` - Chatbot app name (default: `victorai`)
+- `HEROKU_APP_NAME` - LangGraph app name (default: `langgraph-server`)
+
+**Example with custom app names:**
+```bash
+HEROKU_BOT_NAME=my-bot HEROKU_APP_NAME=my-langgraph ./scripts/deploy/deploy.sh all
+```
 
 ## License
 
