@@ -29,5 +29,5 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 # Keep the runtime surface area tight so editable installs inside containers are deterministic.
-include = ["lg_main*", "tool_sets*", "prompt_templates*", "testing_utils*"]
+include = ["lg_main*", "tool_sets*", "prompt_templates*", "testing_utils*", "config*"]
 exclude = ["backup*"]
