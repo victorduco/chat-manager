@@ -57,6 +57,7 @@ class StreamProducer():
         try:
             async for chunk in self.stream:
                 logging.info(f"Stream chunk event: {chunk.event}")
+                logging.info(f"Stream chunk data: {chunk.data}")
                 if chunk.event == "messages":
                     await self.queue_message(chunk.data)
                 if chunk.event == "custom":
