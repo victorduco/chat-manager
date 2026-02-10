@@ -126,7 +126,12 @@ class StreamProducer():
 
         # Only forward assistant text. Tool/human/system messages are internal and
         # can contain tool ids / intermediate state.
-        if msg_type != "ai":
+        #
+        # LangGraph streaming often emits assistant output as AIMessageChunk objects
+        # (type: "AIMessageChunk") rather than a final aggregated AIMessage ("ai").
+        # If we filter strictly on "ai" we drop all streamed text, making the bot
+        # appear silent even though the graph produced a response.
+        if msg_type not in ("ai", "AIMessage", "AIMessageChunk"):
             return False
 
         # Skip metadata nodes
