@@ -23,6 +23,7 @@ class InternalState(BaseModel):
     # Ephemeral routing helper (not persisted to checkpoints).
     chat_manager_decision: Optional[dict] = Field(default=None, exclude=True)
     bot_mentioned: bool = Field(default=False, exclude=True)
+    chat_manager_categories: list[str] = Field(default_factory=list, exclude=True)
 
     @property
     def reasoning_messages_api(self) -> MessageAPI:
@@ -73,6 +74,8 @@ class ExternalState(BaseModel):
     last_reasoning: Annotated[Optional[list[AnyMessage]],
                               manage_state] = Field(default=None)
     memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
+    # Ephemeral routing helper for graph_dispatcher (not persisted to checkpoints).
+    dispatch_target: Optional[str] = Field(default=None, exclude=True)
 
     @property
     def last_reasoning_api(self) -> MessageAPI:

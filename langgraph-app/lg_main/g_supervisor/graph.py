@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, END, START
 from conversation_states.states import ExternalState, InternalState
 from .nodes import intro_checker, intro_responder, prepare_internal, prepare_external
 from .edges import route_after_intro_checker, route_after_mention_checker
-from lg_main.g_chat_manager.graph import graph_chat_manager
+from lg_main.g_chat_manager.internal_graph import graph_chat_manager_internal
 from .nodes import no_intro, mention_checker
 
 
@@ -13,7 +13,7 @@ builder.add_node("intro_checker", intro_checker)
 builder.add_node("intro_responder", intro_responder)
 builder.add_node("no_intro", no_intro)
 builder.add_node("mention_checker", mention_checker)
-builder.add_node("chat_manager", graph_chat_manager)
+builder.add_node("chat_manager", graph_chat_manager_internal)
 builder.add_node("prepare_external", prepare_external)
 
 
