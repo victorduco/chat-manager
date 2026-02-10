@@ -136,11 +136,74 @@ export async function setIntroStatus(threadId, { username = null, telegramId = n
   })
 }
 
+function base64UrlEncode(str) {
+  // Base64url without padding.
+  const bytes = new TextEncoder().encode(str)
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  const b64 = btoa(bin)
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+export async function upsertUsers(threadId, users) {
+  if (!Array.isArray(users)) throw new Error('upsertUsers: users must be an array')
+  const token = base64UrlEncode(JSON.stringify({ users }))
+  const content = `/upsert_users ${token}`
+
+  return createRunWait(threadId, {
+    assistant_id: 'graph_router',
+    input: {
+      messages: [
+        {
+          type: 'human',
+          name: 'admin_panel',
+          content
+        }
+      ]
+    },
+    metadata: {
+      source: 'admin-panel',
+      command: 'upsert_users'
+    }
+  })
+}
+
+export async function deleteThread(threadId) {
+  if (!threadId) throw new Error('deleteThread: missing threadId')
+  const response = await api.delete(`/threads/${threadId}`)
+  // LangGraph API typically returns 204 No Content.
+  return response.data
+}
+
+export async function patchThread(threadId, patch) {
+  if (!threadId) throw new Error('patchThread: missing threadId')
+  if (!patch || typeof patch !== 'object') throw new Error('patchThread: patch must be an object')
+  const response = await api.patch(`/threads/${threadId}`, patch)
+  return response.data
+}
+
+export async function setThreadMetadata(threadId, metadata) {
+  if (!metadata || typeof metadata !== 'object') throw new Error('setThreadMetadata: metadata must be an object')
+  return patchThread(threadId, { metadata })
+}
+
+export async function mergeThreadMetadata(threadId, partial) {
+  if (!partial || typeof partial !== 'object') throw new Error('mergeThreadMetadata: partial must be an object')
+  const t = await getThread(threadId)
+  const current = (t && t.metadata && typeof t.metadata === 'object') ? t.metadata : {}
+  return setThreadMetadata(threadId, { ...current, ...partial })
+}
+
 export default {
   searchThreads,
   getThreadState,
   getThread,
   getThreadHistory,
   createRunWait,
-  setIntroStatus
+  setIntroStatus,
+  upsertUsers,
+  deleteThread,
+  patchThread,
+  setThreadMetadata,
+  mergeThreadMetadata
 }

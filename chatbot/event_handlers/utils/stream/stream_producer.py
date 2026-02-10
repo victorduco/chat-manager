@@ -1,4 +1,4 @@
-from server.config import LANGGRAPH_API_URL
+from server.config import LANGGRAPH_API_URL, DISPATCHER_ASSISTANT_ID
 from typing import AsyncIterator, Union
 from langgraph_sdk import get_client
 from langgraph_sdk.client import LangGraphClient
@@ -35,20 +35,44 @@ class StreamProducer():
         return self
 
     @staticmethod
+    async def _get_dispatch_graph_id(client: LangGraphClient, thread_id: str) -> str | None:
+        """Return per-thread dispatch target from LangGraph thread metadata."""
+        try:
+            t = await client.threads.get(thread_id)
+            meta = (t or {}).get("metadata") or {}
+            v = meta.get("dispatch_graph_id")
+            if v is None:
+                return None
+            v = str(v).strip()
+            return v if v else None
+        except Exception:
+            # Best-effort: if we can't read metadata, fall back to default behavior.
+            return None
+
+    @staticmethod
     async def prep_stream(client, ctx):
         thread = await client.threads.create(
             thread_id=ctx.thread_id,
             graph_id=ctx.get_graph_id(),
             if_exists="do_nothing"
         )
+        dispatch_graph_id = await StreamProducer._get_dispatch_graph_id(client, thread["thread_id"])
         state = ExternalState()
         state.messages = [ctx.message]
         state.users = [ctx.user]
+
+        assistant_id = ctx.get_graph_id()
+        config = None
+        if dispatch_graph_id and DISPATCHER_ASSISTANT_ID:
+            assistant_id = DISPATCHER_ASSISTANT_ID
+            config = {"configurable": {"dispatch_graph_id": dispatch_graph_id}}
+
         stream = client.runs.stream(
             thread_id=thread["thread_id"],
-            assistant_id=ctx.get_graph_id(),
+            assistant_id=assistant_id,
             input=state,
-            stream_mode=["messages-tuple", "custom"]
+            stream_mode=["messages-tuple", "custom"],
+            config=config,
         )
         return thread, stream
 

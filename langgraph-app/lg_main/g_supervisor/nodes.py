@@ -208,6 +208,16 @@ def prepare_external(state: InternalState) -> ExternalState:
     if not assistant_messages:
         assistant_messages = state.reasoning_messages_api.last(name="text_assistant")
 
+    if not assistant_messages:
+        # Nothing to send; avoid crashing the run.
+        logging.warning("Prepare external: no assistant message found; returning empty messages")
+        return ExternalState(
+            messages=[],
+            users=list(state.users),
+            summary=state.summary,
+            last_reasoning=state.reasoning_messages,
+        )
+
     [assistant_message] = assistant_messages
     ext = ExternalState.from_internal(state, assistant_message)
     return ext

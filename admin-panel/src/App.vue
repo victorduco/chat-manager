@@ -18,7 +18,7 @@
       </aside>
 
       <section class="content">
-        <ThreadDetails :thread-id="selectedThreadId" />
+        <ThreadDetails :thread-id="selectedThreadId" @thread-deleted="handleThreadDeleted" />
       </section>
     </main>
   </div>
@@ -35,6 +35,16 @@ const threadsListRef = ref(null)
 
 function handleThreadSelected(threadId) {
   selectedThreadId.value = threadId
+}
+
+function handleThreadDeleted(threadId) {
+  // Clear selection and refresh the list.
+  if (selectedThreadId.value === threadId) {
+    selectedThreadId.value = null
+  }
+  try {
+    threadsListRef.value?.loadThreads?.()
+  } catch (_) {}
 }
 </script>
 

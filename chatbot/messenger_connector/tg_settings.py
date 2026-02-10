@@ -4,11 +4,11 @@ from telegram import BotCommand
 from functools import partial
 
 
+# Commands are now managed via config and only shown to authorized users
+# Commands will not appear in Telegram's command menu to maintain privacy
 TELEGRAM_COMMANDS = [
-    BotCommand("show_thinking", "Show last message thinking"),
-    BotCommand("clear_context", "Clear overall context"),
-    BotCommand("show_context", "Show overall context")
-
+    # Admin commands (not shown in menu, but still work):
+    # /show_all_users - Show all users with intro status (admin only)
 ]
 
 

@@ -36,6 +36,7 @@ class ContextExtractor(BaseModel):
                 username=user_data.username,
                 first_name=user_data.first_name,
                 last_name=user_data.last_name,
+                telegram_id=user_data.id,
             ),
             content_type=content_type,
         )

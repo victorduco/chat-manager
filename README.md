@@ -20,6 +20,7 @@ uv sync
 # Run services (in separate terminals)
 cd langgraph-app && uv run python -m langgraph_cli dev  # Terminal 1
 cd chatbot && uv run python main.py                      # Terminal 2
+cd admin-panel && npm install && npm run dev             # Terminal 3 (optional)
 ```
 
 ## Architecture
@@ -27,6 +28,7 @@ cd chatbot && uv run python main.py                      # Terminal 2
 - **chatbot/** - Telegram bot service (python-telegram-bot + Quart)
 - **langgraph-app/** - LangGraph AI workflows (OpenAI GPT-4)
 - **libs/conversation_states/** - Shared state management library
+- **admin-panel/** - Web admin interface (Vue 3) for thread and user management
 
 ## Deployment
 
@@ -57,6 +59,25 @@ Deploy to Heroku using local scripts:
 ```bash
 HEROKU_BOT_NAME=my-bot HEROKU_APP_NAME=my-langgraph ./scripts/deploy/deploy.sh all
 ```
+
+## Admin Panel
+
+Web-based admin interface for managing threads and viewing user intro status.
+
+**Features:**
+- 📋 Browse and filter threads by status
+- 👥 View all users with intro completion status (✅/❌)
+- 💬 View conversation history
+- 📝 Access thread metadata and state
+
+**Setup:**
+```bash
+cd admin-panel
+npm install
+npm run dev  # Runs at http://localhost:3000
+```
+
+See [admin-panel/README.md](admin-panel/README.md) for detailed documentation.
 
 ## License
 

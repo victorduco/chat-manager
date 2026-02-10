@@ -9,6 +9,8 @@ class Human(BaseModel):
     preferred_name: Optional[str] = None
     information: Dict = Field(default_factory=dict)
     intro_completed: bool = False  # Track if user has written intro
+    # When set by an admin (e.g., via admin panel), keep the value stable across merges.
+    intro_locked: bool = False
 
     def update_info(self, updates: dict[str, str] | list[dict[str, str]]) -> None:
         if isinstance(updates, dict):

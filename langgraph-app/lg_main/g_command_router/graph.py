@@ -4,6 +4,7 @@ from .edges import route_command
 from .nodes import clear_context, clear_context_prep, show_context, show_context_prep
 from .nodes import show_thinking, show_thinking_prep, router, show_all_users, show_all_users_prep
 from .nodes import set_intro_status, set_intro_status_prep
+from .nodes import upsert_users, upsert_users_prep
 import os
 
 
@@ -14,6 +15,8 @@ builder.add_node("show_all_users_prep", show_all_users_prep)
 builder.add_node("show_all_users", show_all_users)
 builder.add_node("set_intro_status_prep", set_intro_status_prep)
 builder.add_node("set_intro_status", set_intro_status)
+builder.add_node("upsert_users_prep", upsert_users_prep)
+builder.add_node("upsert_users", upsert_users)
 builder.add_node("clear_context_prep", clear_context_prep)
 builder.add_node("clear_context", clear_context)
 builder.add_node("show_context_prep", show_context_prep)
@@ -31,12 +34,14 @@ builder.add_conditional_edges(
 
 builder.add_edge("show_all_users_prep", "show_all_users")
 builder.add_edge("set_intro_status_prep", "set_intro_status")
+builder.add_edge("upsert_users_prep", "upsert_users")
 builder.add_edge("clear_context_prep", "clear_context")
 builder.add_edge("show_context_prep", "show_context")
 builder.add_edge("show_thinking_prep", "show_thinking")
 
 builder.add_edge("show_all_users", END)
 builder.add_edge("set_intro_status", END)
+builder.add_edge("upsert_users", END)
 builder.add_edge("clear_context", END)
 builder.add_edge("show_context", END)
 builder.add_edge("show_thinking", END)

@@ -47,14 +47,19 @@
         </div>
         <div class="thread-meta">
           <div v-if="thread.created_at" class="meta-item">
-            📅 {{ formatDate(thread.created_at) }}
+            Created: {{ formatDate(thread.created_at) }}
           </div>
           <div v-if="thread.updated_at" class="meta-item">
-            🕒 {{ formatDate(thread.updated_at) }}
+            Updated: {{ formatDate(thread.updated_at) }}
           </div>
         </div>
-        <div v-if="thread.metadata && Object.keys(thread.metadata).length" class="thread-metadata">
-          <small>{{ JSON.stringify(thread.metadata) }}</small>
+        <div class="thread-counts">
+          <span class="count-chip">
+            💬 {{ (extra(thread.thread_id) && extra(thread.thread_id).messages != null) ? extra(thread.thread_id).messages : '—' }}
+          </span>
+          <span class="count-chip">
+            👥 {{ (extra(thread.thread_id) && extra(thread.thread_id).users != null) ? extra(thread.thread_id).users : '—' }}
+          </span>
         </div>
       </div>
 
@@ -67,7 +72,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { searchThreads } from '../services/api'
+import { searchThreads, getThread } from '../services/api'
 
 const emit = defineEmits(['thread-selected'])
 
@@ -75,6 +80,11 @@ const threads = ref([])
 const selectedThreadId = ref(null)
 const loading = ref(false)
 const error = ref(null)
+const extrasById = ref({})
+
+function extra(threadId) {
+  return extrasById.value[threadId] || null
+}
 
 const filters = ref({
   status: '',
@@ -93,13 +103,60 @@ async function loadThreads() {
       params.status = filters.value.status
     }
 
-    threads.value = await searchThreads(params)
+    const base = await searchThreads(params)
+    threads.value = base
+    // Best-effort enrichment: show message/user counts without blocking the list.
+    enrichThreads(base)
   } catch (err) {
     error.value = err.message || 'Failed to load threads'
     console.error('Load threads error:', err)
   } finally {
     loading.value = false
   }
+}
+
+function pLimit(concurrency) {
+  let active = 0
+  const queue = []
+  const next = () => {
+    if (active >= concurrency) return
+    const item = queue.shift()
+    if (!item) return
+    active++
+    Promise.resolve()
+      .then(item.fn)
+      .then(item.resolve, item.reject)
+      .finally(() => {
+        active--
+        next()
+      })
+  }
+  return (fn) =>
+    new Promise((resolve, reject) => {
+      queue.push({ fn, resolve, reject })
+      next()
+    })
+}
+
+async function enrichThreads(list) {
+  const limit = pLimit(8)
+  const ids = (list || []).map((t) => t.thread_id).filter(Boolean)
+
+  await Promise.all(ids.map((id) => limit(async () => {
+    try {
+      const t = await getThread(id)
+      const values = (t && t.values) || {}
+      const messages = Array.isArray(values.messages) ? values.messages.length : null
+      const users = Array.isArray(values.users) ? values.users.length : null
+
+      extrasById.value = {
+        ...extrasById.value,
+        [id]: { messages, users }
+      }
+    } catch (_) {
+      // Ignore enrichment errors.
+    }
+  })))
 }
 
 function selectThread(threadId) {
@@ -278,16 +335,23 @@ defineExpose({ loadThreads })
   color: #6c757d;
 }
 
-.thread-metadata {
+.thread-counts {
+  display: flex;
+  gap: 0.5rem;
   margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #e9ecef;
 }
 
-.thread-metadata small {
-  color: #6c757d;
-  font-family: monospace;
+.count-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: 0.75rem;
+  color: #495057;
+  background: #f1f3f5;
+  border: 1px solid #e9ecef;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 .empty-state {

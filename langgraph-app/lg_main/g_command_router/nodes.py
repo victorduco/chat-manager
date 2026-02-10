@@ -1,7 +1,10 @@
 from conversation_states.states import ExternalState
+from conversation_states.humans import Human
 from conversation_states.actions import ActionSender, Action
 from langgraph.types import StreamWriter
 from config import is_admin
+import base64
+import json
 
 
 ADMIN_PANEL_SENDER_NAME = "admin_panel"
@@ -76,6 +79,140 @@ def set_intro_status_prep(state: ExternalState) -> ExternalState:
     return state
 
 
+def upsert_users_prep(state: ExternalState) -> ExternalState:
+    # Keep the command message until the action node parses it.
+    return state
+
+
+def _b64url_decode_to_str(token: str) -> str | None:
+    if not isinstance(token, str):
+        return None
+    t = token.strip()
+    if not t:
+        return None
+    pad = "=" * (-len(t) % 4)
+    try:
+        return base64.urlsafe_b64decode((t + pad).encode("utf-8")).decode("utf-8")
+    except Exception:
+        return None
+
+
+def _parse_upsert_users_command(text: str) -> list[dict] | None:
+    # Expected: /upsert_users <base64url(JSON)>
+    if not isinstance(text, str):
+        return None
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) != 2:
+        return None
+    if parts[0] != "/upsert_users":
+        return None
+    decoded = _b64url_decode_to_str(parts[1])
+    if decoded is None:
+        return None
+    try:
+        payload = json.loads(decoded)
+    except Exception:
+        return None
+    users = payload.get("users") if isinstance(payload, dict) else None
+    if not isinstance(users, list):
+        return None
+    return [u for u in users if isinstance(u, dict)]
+
+
+def upsert_users(state: ExternalState, writer: StreamWriter) -> ExternalState:
+    """Admin command: add/update users in state.users and persist via checkpoint."""
+    sender = ActionSender(writer)
+
+    # Permissions: allow if caller is a known admin user OR the admin panel.
+    last_message = state.messages[-1] if state.messages else None
+    sender_name = getattr(last_message, "name", None)
+    current_user = get_current_user(state)
+
+    allowed = False
+    if sender_name == ADMIN_PANEL_SENDER_NAME:
+        allowed = True
+    elif current_user and current_user.telegram_id and is_admin(current_user.telegram_id):
+        allowed = True
+
+    if not allowed:
+        sender.send_action(Action(type="system-message", value="❌ Access denied. This command is only available to administrators."))
+        return state
+
+    command_text = getattr(last_message, "content", "") if last_message else ""
+    parsed_users = _parse_upsert_users_command(command_text)
+    if parsed_users is None:
+        sender.send_action(Action(type="system-message", value="❌ Invalid command. Usage: /upsert_users <base64url(JSON)>"))
+        return state
+
+    if state.users is None:
+        state.users = []
+
+    existing_by_username = {u.username: u for u in (state.users or []) if getattr(u, "username", None)}
+    added = 0
+    updated = 0
+    skipped = 0
+
+    for raw in parsed_users:
+        username = (raw.get("username") or "").strip()
+        if username.startswith("@"):
+            username = username[1:]
+        if not username:
+            skipped += 1
+            continue
+
+        first_name = (raw.get("first_name") or "").strip() or username
+        candidate = {
+            "username": username,
+            "first_name": first_name,
+            "last_name": raw.get("last_name", None),
+            "preferred_name": raw.get("preferred_name", None),
+            "information": raw.get("information") if isinstance(raw.get("information"), dict) else {},
+            "intro_completed": bool(raw.get("intro_completed", False)),
+            "telegram_id": raw.get("telegram_id", None),
+        }
+
+        try:
+            if candidate["telegram_id"] is not None:
+                candidate["telegram_id"] = int(candidate["telegram_id"])
+        except Exception:
+            candidate["telegram_id"] = None
+
+        try:
+            hu = Human(**candidate)
+        except Exception:
+            skipped += 1
+            continue
+
+        prev = existing_by_username.get(username)
+        if prev is None:
+            state.users.append(hu)
+            existing_by_username[username] = hu
+            # Admin upsert: treat as authoritative for intro status.
+            hu.intro_locked = True
+            added += 1
+        else:
+            prev.first_name = hu.first_name
+            prev.last_name = hu.last_name
+            prev.preferred_name = hu.preferred_name
+            prev.telegram_id = hu.telegram_id
+            prev.intro_completed = bool(hu.intro_completed)
+            prev.intro_locked = True
+            try:
+                if hu.information:
+                    prev.information.update(hu.information)
+            except Exception:
+                pass
+            updated += 1
+
+    try:
+        state.messages_api.remove_last()
+    except Exception:
+        pass
+
+    sender.send_action(Action(type="system-message", value=f"✅ Users upserted. Added: {added}, updated: {updated}, skipped: {skipped}."))
+    return state
+
+
 def _parse_intro_bool(token: str) -> bool | None:
     t = (token or "").strip().lower()
     if t in {"done", "completed", "complete", "true", "1", "yes", "y", "on"}:
@@ -139,6 +276,7 @@ def set_intro_status(state: ExternalState, writer: StreamWriter) -> ExternalStat
     if target.lower() == "all":
         for u in state.users:
             u.intro_completed = status
+            u.intro_locked = True
             updated += 1
     else:
         # Support telegram:ID or raw ID.
@@ -158,9 +296,11 @@ def set_intro_status(state: ExternalState, writer: StreamWriter) -> ExternalStat
         for u in state.users:
             if telegram_id is not None and u.telegram_id == telegram_id:
                 u.intro_completed = status
+                u.intro_locked = True
                 updated += 1
             elif telegram_id is None and u.username == target:
                 u.intro_completed = status
+                u.intro_locked = True
                 updated += 1
 
     if updated == 0:

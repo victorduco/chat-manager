@@ -39,8 +39,19 @@ def add_user(left: list["Human"], right: list["Human"]) -> list["Human"]:
         if getattr(ru, "telegram_id", None) is not None:
             lu.telegram_id = ru.telegram_id
 
-        # Booleans should overwrite (explicit True/False).
-        lu.intro_completed = bool(ru.intro_completed)
+        # Preserve admin-set intro status across merges.
+        # Most "normal" user updates don't know intro status and would default to False,
+        # which would otherwise revert a manual "done" back to "pending".
+        if getattr(ru, "intro_locked", False):
+            lu.intro_locked = True
+
+        if getattr(lu, "intro_locked", False):
+            # Only allow changes from another locked update.
+            if getattr(ru, "intro_locked", False):
+                lu.intro_completed = bool(ru.intro_completed)
+        else:
+            # Booleans overwrite when not locked.
+            lu.intro_completed = bool(ru.intro_completed)
 
         # Merge info dict.
         try:

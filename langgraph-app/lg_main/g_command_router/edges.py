@@ -6,6 +6,7 @@ from config import get_command_mapping
 def route_command(state: ExternalState) -> Literal[
     "show_all_users_prep",
     "set_intro_status_prep",
+    "upsert_users_prep",
     "clear_context_prep",
     "show_context_prep",
     "show_thinking_prep",

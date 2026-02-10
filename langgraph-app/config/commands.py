@@ -29,6 +29,13 @@ COMMANDS = {
         "node_prep": "set_intro_status_prep",
         "node_action": "set_intro_status",
     },
+    "upsert_users": {
+        "command": "/upsert_users",
+        "description": "Upsert users into thread state (admin only). Usage: /upsert_users <base64url(JSON)> where JSON is {users:[{username,first_name,last_name,intro_completed,telegram_id,preferred_name,information}]}",
+        "admin_only": True,
+        "node_prep": "upsert_users_prep",
+        "node_action": "upsert_users",
+    },
     # Legacy commands - can be removed later
     # "clear_context": {
     #     "command": "/clear_context",

@@ -21,11 +21,73 @@
       <div class="thread-header">
         <div class="info-item">
           <label>Thread ID:</label>
-          <code>{{ truncateId(threadId) }}</code>
+          <code class="thread-id-full">{{ threadId }}</code>
         </div>
         <div class="info-item" v-if="state.created_at">
           <label>Created:</label>
           <span>{{ formatDateTime(state.created_at) }}</span>
+        </div>
+        <div class="info-item" v-if="state.updated_at">
+          <label>Updated:</label>
+          <span>{{ formatDateTime(state.updated_at) }}</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="graph-config">
+          <label class="graph-label">Graph:</label>
+          <select
+            class="graph-select"
+            :disabled="graphBusy || !threadId"
+            :value="dispatchGraphValue"
+            @change="(e) => onChangeGraph(e.target.value)"
+          >
+            <option value="">Default (auto)</option>
+            <option value="graph_supervisor">graph_supervisor</option>
+            <option value="graph_router">graph_router</option>
+          </select>
+          <span v-if="graphBusy" class="graph-status">Saving...</span>
+          <span v-else-if="graphError" class="graph-error">{{ graphError }}</span>
+        </div>
+
+        <button class="import-btn" @click="importOpen = !importOpen">
+          {{ importOpen ? 'Hide' : 'Paste' }} YAML
+        </button>
+        <button class="delete-btn" :disabled="deleteBusy" @click="onDeleteThread">
+          {{ deleteBusy ? 'Deleting...' : 'Delete Thread' }}
+        </button>
+        <span v-if="importStatus" class="import-status">{{ importStatus }}</span>
+      </div>
+
+      <div v-if="importOpen" class="import-panel">
+        <div class="import-help">
+          <div class="import-title">Import users from YAML</div>
+          <div class="import-subtitle">
+            Supported formats:
+            <code>- username: ducov</code>
+            <code>  first_name: Viktor</code>
+            <code>  last_name: Dyukov</code>
+            <code>  intro: true</code>
+            or simple blocks:
+            <code>Viktor Dyukov</code>
+            <code>@ducov</code>
+            <code>intro:true</code>
+          </div>
+        </div>
+
+        <textarea
+          v-model="importText"
+          class="import-textarea"
+          placeholder="Paste YAML here..."
+          rows="8"
+        />
+
+        <div class="import-actions">
+          <button class="import-apply" :disabled="importBusy || !threadId" @click="onImportYaml">
+            {{ importBusy ? 'Importing...' : 'Add Users' }}
+          </button>
+          <button class="import-clear" :disabled="importBusy" @click="importText = ''">Clear</button>
+          <span v-if="importError" class="import-error">{{ importError }}</span>
         </div>
       </div>
 
@@ -141,7 +203,8 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
-import { getThreadState, setIntroStatus } from '../services/api'
+import { getThreadState, getThread, setThreadMetadata, setIntroStatus, upsertUsers, deleteThread, mergeThreadMetadata } from '../services/api'
+import YAML from 'js-yaml'
 
 const props = defineProps({
   threadId: {
@@ -150,11 +213,28 @@ const props = defineProps({
   }
 })
 
+const emit = defineEmits(['thread-deleted'])
+
 const state = ref(null)
 const loading = ref(false)
 const error = ref(null)
 const activeTab = ref('users')
 const savingUserKey = ref(null)
+const importOpen = ref(false)
+const importText = ref('')
+const importError = ref('')
+const importStatus = ref('')
+const importBusy = ref(false)
+const deleteBusy = ref(false)
+const threadInfo = ref(null)
+const graphBusy = ref(false)
+const graphError = ref('')
+
+const dispatchGraphValue = computed(() => {
+  const meta = threadInfo.value?.metadata
+  const v = meta && typeof meta === 'object' ? meta.dispatch_graph_id : null
+  return (typeof v === 'string') ? v : (v == null ? '' : String(v))
+})
 
 const users = computed(() => {
   if (!state.value?.values?.users) return []
@@ -175,11 +255,185 @@ async function loadThreadState() {
 
   try {
     state.value = await getThreadState(props.threadId)
+    // Best-effort: metadata for graph routing lives on /threads/:id, not /state.
+    try {
+      threadInfo.value = await getThread(props.threadId)
+    } catch (_) {
+      threadInfo.value = null
+    }
   } catch (err) {
     error.value = err.message || 'Failed to load thread state'
     console.error('Load thread state error:', err)
   } finally {
     loading.value = false
+  }
+}
+
+async function onChangeGraph(value) {
+  if (!props.threadId) return
+  graphError.value = ''
+
+  // Empty string means "unset" -> clear key to fall back to default behavior.
+  const next = String(value || '').trim()
+
+  graphBusy.value = true
+  try {
+    if (next) {
+      await mergeThreadMetadata(props.threadId, { dispatch_graph_id: next })
+    } else {
+      // Clear the key entirely (avoid leaving nulls around).
+      const t = await getThread(props.threadId)
+      const current = (t && t.metadata && typeof t.metadata === 'object') ? { ...t.metadata } : {}
+      delete current.dispatch_graph_id
+      await setThreadMetadata(props.threadId, current)
+    }
+    threadInfo.value = await getThread(props.threadId)
+  } catch (e) {
+    graphError.value = e?.message || 'Failed to save graph'
+  } finally {
+    graphBusy.value = false
+  }
+}
+
+function splitName(fullName) {
+  const s = (fullName || '').trim().replace(/\s+/g, ' ')
+  if (!s) return { first_name: '', last_name: null }
+  const parts = s.split(' ')
+  if (parts.length === 1) return { first_name: parts[0], last_name: null }
+  return { first_name: parts[0], last_name: parts.slice(1).join(' ') }
+}
+
+function normalizeIntro(v) {
+  if (typeof v === 'boolean') return v
+  const t = String(v ?? '').trim().toLowerCase()
+  if (['true', 'yes', 'y', '1', 'done', 'completed', 'complete', 'on'].includes(t)) return true
+  if (['false', 'no', 'n', '0', 'pending', 'off', 'not_done', 'notdone'].includes(t)) return false
+  return null
+}
+
+function parseSimpleBlocks(text) {
+  const blocks = String(text || '')
+    .trim()
+    .split(/\n\s*\n+/g)
+    .map((b) => b.trim())
+    .filter(Boolean)
+
+  const out = []
+  for (const b of blocks) {
+    const lines = b.split('\n').map((l) => l.trim()).filter(Boolean)
+    if (lines.length < 2) continue
+    const fullName = lines[0]
+    const usernameLine = lines[1]
+    const username = usernameLine.startsWith('@') ? usernameLine.slice(1).trim() : usernameLine.trim()
+    const introLine = lines.find((l) => l.toLowerCase().startsWith('intro'))
+    let introVal = null
+    if (introLine) {
+      const m = introLine.split(':', 2)
+      introVal = normalizeIntro(m.length === 2 ? m[1] : '')
+    }
+    const { first_name, last_name } = splitName(fullName)
+    out.push({
+      username,
+      first_name: first_name || username,
+      last_name,
+      intro_completed: introVal === true
+    })
+  }
+  return out
+}
+
+function parseUsersYaml(text) {
+  const raw = String(text || '').trim()
+  if (!raw) return []
+
+  try {
+    const doc = YAML.load(raw)
+    let arr = null
+    if (Array.isArray(doc)) arr = doc
+    else if (doc && typeof doc === 'object' && Array.isArray(doc.users)) arr = doc.users
+
+    if (arr) {
+      return arr
+        .filter((u) => u && typeof u === 'object')
+        .map((u) => {
+          const username = String(u.username || u.user || u.handle || '').trim().replace(/^@/, '')
+          const intro = normalizeIntro(u.intro ?? u.intro_completed ?? u.introCompleted)
+          let first_name = String(u.first_name || u.firstName || '').trim()
+          let last_name = u.last_name ?? u.lastName ?? null
+
+          if (!first_name && (u.name || u.full_name || u.fullName)) {
+            const split = splitName(String(u.name || u.full_name || u.fullName))
+            first_name = split.first_name
+            last_name = last_name ?? split.last_name
+          }
+
+          return {
+            username,
+            first_name: first_name || username,
+            last_name: last_name != null ? String(last_name) : null,
+            telegram_id: u.telegram_id ?? u.telegramId ?? null,
+            preferred_name: u.preferred_name ?? u.preferredName ?? null,
+            information: (u.information && typeof u.information === 'object') ? u.information : {},
+            intro_completed: intro === true
+          }
+        })
+    }
+  } catch (_) {
+    // fall through
+  }
+
+  return parseSimpleBlocks(raw)
+}
+
+async function onImportYaml() {
+  if (!props.threadId) {
+    importError.value = 'Select a thread first.'
+    return
+  }
+
+  importError.value = ''
+  importStatus.value = ''
+
+  let usersToUpsert = parseUsersYaml(importText.value)
+  usersToUpsert = usersToUpsert.filter((u) => u && u.username)
+
+  if (usersToUpsert.length === 0) {
+    importError.value = 'No users found. Provide at least one username.'
+    return
+  }
+
+  importBusy.value = true
+  try {
+    await upsertUsers(props.threadId, usersToUpsert)
+    importStatus.value = `Imported ${usersToUpsert.length} user(s)`
+    await loadThreadState()
+  } catch (e) {
+    importError.value = e?.message || 'Import failed'
+    try { await loadThreadState() } catch (_) {}
+  } finally {
+    importBusy.value = false
+  }
+}
+
+async function onDeleteThread() {
+  if (!props.threadId) return
+  if (deleteBusy.value) return
+
+  const ok = window.confirm(`Delete thread ${props.threadId}?\n\nThis cannot be undone.`)
+  if (!ok) return
+
+  deleteBusy.value = true
+  error.value = null
+  importStatus.value = ''
+  importError.value = ''
+
+  try {
+    await deleteThread(props.threadId)
+    emit('thread-deleted', props.threadId)
+  } catch (e) {
+    error.value = e?.message || 'Failed to delete thread'
+  } finally {
+    deleteBusy.value = false
   }
 }
 
@@ -242,6 +496,172 @@ watch(() => props.threadId, (newId) => {
   display: flex;
   flex-direction: column;
   background: white;
+}
+
+.thread-id-full {
+  word-break: break-all;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem 0.75rem 1rem;
+  flex-wrap: wrap;
+}
+
+.graph-config {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.graph-label {
+  font-weight: 700;
+  color: #212529;
+}
+
+.graph-select {
+  border: 1px solid #ced4da;
+  background: white;
+  color: #212529;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.graph-status {
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+.graph-error {
+  color: #c92a2a;
+  font-size: 0.9rem;
+}
+
+.import-btn {
+  border: 1px solid #ced4da;
+  background: white;
+  color: #212529;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.import-btn:hover {
+  background: #f1f3f5;
+}
+
+.delete-btn {
+  border: 1px solid #fa5252;
+  background: #fff5f5;
+  color: #c92a2a;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.delete-btn:hover {
+  background: #ffe3e3;
+}
+
+.delete-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.import-status {
+  color: #2b8a3e;
+  font-size: 0.9rem;
+}
+
+.import-panel {
+  padding: 0 1rem 1rem 1rem;
+  border-bottom: 1px solid #e9ecef;
+  background: #ffffff;
+}
+
+.import-help {
+  margin-bottom: 0.75rem;
+}
+
+.import-title {
+  font-weight: 700;
+  color: #212529;
+  margin-bottom: 0.25rem;
+}
+
+.import-subtitle {
+  color: #6c757d;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.import-subtitle code {
+  background: #f1f3f5;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.import-textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  outline: none;
+}
+
+.import-textarea:focus {
+  border-color: #748ffc;
+  box-shadow: 0 0 0 3px rgba(116, 143, 252, 0.18);
+}
+
+.import-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.import-apply {
+  border: 1px solid #4263eb;
+  background: #4263eb;
+  color: white;
+  padding: 0.45rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.import-apply:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.import-clear {
+  border: 1px solid #ced4da;
+  background: white;
+  color: #212529;
+  padding: 0.45rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.import-error {
+  color: #c92a2a;
+  font-size: 0.9rem;
 }
 
 .empty-state,
