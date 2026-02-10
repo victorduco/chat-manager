@@ -94,6 +94,7 @@ def intro_checker(state: InternalState, writer) -> InternalState:
     from conversation_states.actions import ActionSender
 
     sender = state.last_sender
+    sender_intro_locked = bool(getattr(sender, "intro_locked", False))
 
     # If no sender, skip
     if not sender:
@@ -111,16 +112,24 @@ def intro_checker(state: InternalState, writer) -> InternalState:
 
     # Check if any previous message contains #intro hashtag
     has_intro_before = False
-    for msg in user_messages[:-1]:  # Exclude current message
-        content = getattr(msg, 'content', '')
-        if isinstance(content, str) and '#intro' in content.lower():
-            has_intro_before = True
-            break
+    # If admin explicitly set intro status (intro_locked), do not infer completion
+    # from old messages. That keeps "pending" meaningful even if the user had
+    # posted #intro long ago.
+    if not sender_intro_locked:
+        for msg in user_messages[:-1]:  # Exclude current message
+            content = getattr(msg, 'content', '')
+            if isinstance(content, str) and '#intro' in content.lower():
+                has_intro_before = True
+                break
 
     # Mark intro as completed if found in current message
     if has_intro_now and not sender.intro_completed:
         sender.intro_completed = True
         logging.info(f"User {sender.username} completed intro with hashtag #intro in current message")
+    elif has_intro_before and not sender.intro_completed and not sender_intro_locked:
+        # Keep state consistent: if we detect past #intro, consider intro completed.
+        sender.intro_completed = True
+        logging.info(f"User {sender.username} already had #intro in history; marking intro_completed=True")
 
     # Send reaction based on intro status
     if writer:
@@ -129,7 +138,7 @@ def intro_checker(state: InternalState, writer) -> InternalState:
             # User just completed intro NOW - send heart
             action_sender.send_reaction("❤")
             logging.info(f"Sent ❤ reaction to user {sender.username} - intro completed now")
-        elif has_intro_before or sender.intro_completed:
+        elif sender.intro_completed:
             # User completed intro before - no reaction
             logging.info(f"No reaction sent to user {sender.username} - intro was completed before")
         else:
