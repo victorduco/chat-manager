@@ -1,7 +1,7 @@
 from .context_extractor import ContextExtractor
 from telegram.constants import ParseMode
 from event_handlers.utils.stream.stream_queue import StreamQueue
-from .message_responder import MessageResponder
+from .message_responder import MessageResponder, sanitize_html
 import asyncio
 from typing import Any
 from conversation_states.actions import Reaction, Action
@@ -75,9 +75,10 @@ class StreamConsumer():
         if not text:
             return
 
+        sanitized_text = sanitize_html(text)
         max_length = 4096
-        chunks = [text[i:i+max_length]
-                  for i in range(0, len(text), max_length)]
+        chunks = [sanitized_text[i:i+max_length]
+                  for i in range(0, len(sanitized_text), max_length)]
 
         for chunk in chunks:
             await self.tg_message.reply_text(

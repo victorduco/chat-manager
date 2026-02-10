@@ -3,6 +3,31 @@ from telegram import Message as TgMessage
 import asyncio
 from datetime import datetime
 from typing import Literal
+import re
+import html
+
+
+def sanitize_html(text: str) -> str:
+    """
+    Sanitize HTML for Telegram by removing or fixing problematic tags.
+    Telegram supports only: <b>, <strong>, <i>, <em>, <u>, <ins>, <s>, <strike>, <del>,
+    <span class="tg-spoiler">, <tg-spoiler>, <a href="">, <tg-emoji emoji-id="">, <code>, <pre>
+    """
+    if not text:
+        return text
+
+    # Remove unclosed or problematic blockquote tags
+    text = re.sub(r'</?blockquote[^>]*>', '', text)
+
+    # Remove any other unsupported HTML tags while keeping their content
+    # Keep only Telegram-supported tags
+    allowed_tags = ['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a', 'span']
+
+    # Remove unsupported opening/closing tags but keep content
+    text = re.sub(r'<(?!/?)(?!(?:' + '|'.join(allowed_tags) + r')\b)[^>]+>', '', text)
+    text = re.sub(r'</(?!(?:' + '|'.join(allowed_tags) + r')\b)[^>]+>', '', text)
+
+    return text
 
 
 # === Response: object for a single message_id ===
@@ -32,7 +57,8 @@ class Response:
         text = self.buffered_text()
         if len(text) > self.MAX_LENGTH:
             return  # Could add truncation or splitting
-        await self.ai_msg.edit_text(text, parse_mode=self.PARSE_MODE)
+        sanitized_text = sanitize_html(text)
+        await self.ai_msg.edit_text(sanitized_text, parse_mode=self.PARSE_MODE)
         self.cur_txt = text
         self.buffer.clear()
         self.last_sent = datetime.now()
@@ -56,7 +82,8 @@ class MessageResponder:
         return message_id in self.responses
 
     async def initialize(self, message_id: str, first_chunk: str, message_type: str = "text"):
-        ai_msg = await self.tg_message.reply_text(first_chunk, parse_mode=Response.PARSE_MODE)
+        sanitized_chunk = sanitize_html(first_chunk)
+        ai_msg = await self.tg_message.reply_text(sanitized_chunk, parse_mode=Response.PARSE_MODE)
         self.responses[message_id] = Response(
             ai_msg, type=message_type, cur_txt=first_chunk)
 
