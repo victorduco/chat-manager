@@ -55,9 +55,9 @@ fi
 echo "🔐 Logging in to Heroku Container Registry..."
 heroku container:login
 
-# Build Docker image using LangGraph CLI
-echo "🏗️  Building LangGraph Docker image..."
-langgraph build --tag "registry.heroku.com/$HEROKU_APP_NAME/web"
+# Build Docker image using LangGraph CLI for linux/amd64 (Heroku platform)
+echo "🏗️  Building LangGraph Docker image for linux/amd64..."
+langgraph build --tag "registry.heroku.com/$HEROKU_APP_NAME/web" --platform linux/amd64
 
 # Verify the image was built
 if ! docker images "registry.heroku.com/$HEROKU_APP_NAME/web" | grep -q web; then
