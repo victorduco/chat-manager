@@ -1,4 +1,5 @@
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.types import StreamWriter
 from tool_sets.user_profile import set_preferred_name, update_user_info, mark_intro_completed, send_user_reaction
 from prompt_templates.prompt_builder import PromptBuilder
 from langchain_core.messages import RemoveMessage, SystemMessage
@@ -88,7 +89,7 @@ def action_assistant(state: InternalState) -> InternalState:
     pass
 
 
-def intro_checker(state: InternalState) -> InternalState:
+def intro_checker(state: InternalState, writer) -> InternalState:
     """Check if user message contains #intro hashtag and send reaction."""
     from conversation_states.actions import ActionSender
 
@@ -117,7 +118,6 @@ def intro_checker(state: InternalState) -> InternalState:
             break
 
     # Send reaction based on intro status
-    writer = state.get("writer")
     if writer:
         action_sender = ActionSender(writer)
         if has_intro or sender.intro_completed:
