@@ -9,6 +9,7 @@ from pydantic import TypeAdapter
 from testing_utils import create_test_user
 import os
 import logging
+import random
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -193,12 +194,15 @@ def intro_responder(state: InternalState) -> InternalState:
 
 
 def no_intro(state: InternalState, writer=None) -> InternalState:
-    """If intro not completed and current message isn't an intro, react 👎 and exit."""
+    """If intro not completed and current message isn't an intro, react with neutral emoji and exit."""
     from conversation_states.actions import ActionSender
 
     if writer:
         try:
-            ActionSender(writer).send_reaction("👎")
+            # Random neutral reaction instead of negative thumbs down
+            neutral_reactions = ["⏳", "🔄", "⏸️"]
+            reaction = random.choice(neutral_reactions)
+            ActionSender(writer).send_reaction(reaction)
         except Exception:
             pass
 
