@@ -163,7 +163,7 @@
               >
                 <td class="status-cell">
                   <span class="status-badge" :class="{ completed: user.intro_completed }">
-                    {{ user.intro_completed ? '✅ Done' : '❌ Pending' }}
+                    {{ user.intro_completed ? '✅ Done' : `${pendingIcon} Pending` }}
                   </span>
                 </td>
                 <td class="edit-cell">
@@ -332,6 +332,12 @@ const memoryRecords = computed(() => {
 
 const deleteBlockedByUsers = computed(() => {
   return users.value.length > 5
+})
+
+const pendingIcon = computed(() => {
+  const icons = ['⏳', '🔄', '⏸️']
+  const index = (props.threadId?.charCodeAt(0) || 0) % icons.length
+  return icons[index]
 })
 
 async function loadThreadState() {
