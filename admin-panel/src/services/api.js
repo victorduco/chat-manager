@@ -1,10 +1,37 @@
 import axios from 'axios'
 
-// Use environment variable or default to production URL
-const API_BASE_URL = import.meta.env.VITE_LANGGRAPH_API_URL || 'https://langgraph-server.herokuapp.com'
+// API URLs for different environments
+const API_URLS = {
+  prod: 'https://langgraph-server-611bd1822796.herokuapp.com',
+  dev: 'http://localhost:2024'
+}
 
+// Get current environment from localStorage or default to prod
+export function getCurrentEnvironment() {
+  return localStorage.getItem('api_environment') || 'prod'
+}
+
+// Set environment (prod or dev)
+export function setEnvironment(env) {
+  if (env !== 'prod' && env !== 'dev') {
+    throw new Error('Environment must be "prod" or "dev"')
+  }
+  localStorage.setItem('api_environment', env)
+  // Update API base URL
+  api.defaults.baseURL = API_URLS[env]
+  // Dispatch custom event to notify components
+  window.dispatchEvent(new CustomEvent('api-environment-changed', { detail: env }))
+}
+
+// Get current API URL
+export function getCurrentApiUrl() {
+  const env = getCurrentEnvironment()
+  return API_URLS[env]
+}
+
+// Initialize API with current environment
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getCurrentApiUrl(),
   headers: {
     'Content-Type': 'application/json'
   }
@@ -205,5 +232,8 @@ export default {
   deleteThread,
   patchThread,
   setThreadMetadata,
-  mergeThreadMetadata
+  mergeThreadMetadata,
+  getCurrentEnvironment,
+  setEnvironment,
+  getCurrentApiUrl
 }

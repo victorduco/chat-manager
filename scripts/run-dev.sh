@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Run the development environment with ngrok tunnel
+# Run the development environment with localtunnel (no registration)
 
 set -e
 
@@ -13,11 +13,10 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}=== Agent Task Manager - Dev Environment Setup ===${NC}\n"
 
-# Check if ngrok is installed
-if ! command -v ngrok &> /dev/null; then
-    echo -e "${RED}Error: ngrok is not installed${NC}"
-    echo -e "Install ngrok from: ${YELLOW}https://ngrok.com/download${NC}"
-    echo -e "Or via brew: ${YELLOW}brew install ngrok${NC}"
+# localtunnel is executed via npx, so we only need Node/npm present.
+if ! command -v npx &> /dev/null; then
+    echo -e "${RED}Error: npx is not available${NC}"
+    echo -e "Install Node.js (includes npm/npx): ${YELLOW}https://nodejs.org${NC}"
     exit 1
 fi
 
@@ -41,6 +40,11 @@ fi
 echo -e "${GREEN}✓${NC} Environment configured"
 echo -e "${BLUE}Starting services...${NC}\n"
 
+# Ports (override if needed)
+LANGGRAPH_PORT="${LANGGRAPH_PORT:-2024}"
+# macOS often has services on 5000; default to a safer port.
+CHATBOT_PORT="${CHATBOT_PORT:-5050}"
+
 # Function to cleanup on exit
 cleanup() {
     echo -e "\n${YELLOW}Shutting down services...${NC}"
@@ -50,59 +54,72 @@ cleanup() {
 trap cleanup INT TERM
 
 # Start LangGraph in background
-echo -e "${BLUE}[1/3] Starting LangGraph API on port 2024...${NC}"
-cd langgraph-app
-uv run python -m langgraph_cli dev --port 2024 > ../logs/langgraph.log 2>&1 &
+echo -e "${BLUE}[1/3] Starting LangGraph API on port ${LANGGRAPH_PORT}...${NC}"
+uv run --all-packages --directory langgraph-app \
+    python -m langgraph_cli dev --port "${LANGGRAPH_PORT}" > logs/langgraph.log 2>&1 &
 LANGGRAPH_PID=$!
-cd ..
 
 # Wait for LangGraph to start
 sleep 5
-if ! curl -s http://localhost:2024 > /dev/null; then
+if ! curl -s "http://localhost:${LANGGRAPH_PORT}" > /dev/null; then
     echo -e "${RED}Error: LangGraph failed to start${NC}"
     echo -e "Check logs/langgraph.log for details"
     kill $LANGGRAPH_PID 2>/dev/null
     exit 1
 fi
-echo -e "${GREEN}✓${NC} LangGraph API running on http://localhost:2024"
+echo -e "${GREEN}✓${NC} LangGraph API running on http://localhost:${LANGGRAPH_PORT}"
 
 # Start chatbot server in background
-echo -e "\n${BLUE}[2/3] Starting Chatbot server on port 5000...${NC}"
-cd chatbot
-uv run python main.py > ../logs/chatbot.log 2>&1 &
+echo -e "\n${BLUE}[2/3] Starting Chatbot server on port ${CHATBOT_PORT}...${NC}"
+PORT="${CHATBOT_PORT}" LANGGRAPH_API_URL="http://localhost:${LANGGRAPH_PORT}" \
+    uv run --all-packages --directory chatbot python main.py > logs/chatbot.log 2>&1 &
 CHATBOT_PID=$!
-cd ..
 
 # Wait for chatbot to start
 sleep 3
-if ! curl -s http://localhost:5000 > /dev/null; then
+if ! curl -s "http://localhost:${CHATBOT_PORT}" > /dev/null; then
     echo -e "${RED}Error: Chatbot server failed to start${NC}"
     echo -e "Check logs/chatbot.log for details"
     kill $LANGGRAPH_PID $CHATBOT_PID 2>/dev/null
     exit 1
 fi
-echo -e "${GREEN}✓${NC} Chatbot server running on http://localhost:5000"
+echo -e "${GREEN}✓${NC} Chatbot server running on http://localhost:${CHATBOT_PORT}"
 
-# Start ngrok tunnel
-echo -e "\n${BLUE}[3/3] Starting ngrok tunnel...${NC}"
-ngrok http 5000 --log=stdout > logs/ngrok.log 2>&1 &
-NGROK_PID=$!
+# Start localtunnel
+echo -e "\n${BLUE}[3/3] Starting localtunnel...${NC}"
 
-# Wait for ngrok to start and get URL
-sleep 3
-NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | grep -o '"public_url":"https://[^"]*' | cut -d'"' -f4 | head -n1)
+# Optional: request a stable subdomain (may fail if already taken)
+# Example: LOCALTUNNEL_SUBDOMAIN=my-dev-bot ./scripts/run-dev.sh
+# localtunnel writes the URL to stdout; keep full logs for debugging.
+LT_ARGS=(--port "${CHATBOT_PORT}")
+if [ -n "${LOCALTUNNEL_SUBDOMAIN:-}" ]; then
+    LT_ARGS+=(--subdomain "${LOCALTUNNEL_SUBDOMAIN}")
+fi
 
-if [ -z "$NGROK_URL" ]; then
-    echo -e "${RED}Error: Could not get ngrok URL${NC}"
-    echo -e "Check logs/ngrok.log for details"
-    kill $LANGGRAPH_PID $CHATBOT_PID $NGROK_PID 2>/dev/null
+npx --yes localtunnel "${LT_ARGS[@]}" > logs/localtunnel.log 2>&1 &
+LOCALTUNNEL_PID=$!
+
+# Wait for localtunnel to print URL
+LOCALTUNNEL_URL=""
+for _ in $(seq 1 50); do
+    LOCALTUNNEL_URL=$(rg -o "https://[^ ]+" logs/localtunnel.log | head -n 1 || true)
+    if [ -n "$LOCALTUNNEL_URL" ]; then
+        break
+    fi
+    sleep 0.2
+done
+
+if [ -z "$LOCALTUNNEL_URL" ]; then
+    echo -e "${RED}Error: Could not get localtunnel URL${NC}"
+    echo -e "Check logs/localtunnel.log for details"
+    kill $LANGGRAPH_PID $CHATBOT_PID $LOCALTUNNEL_PID 2>/dev/null
     exit 1
 fi
 
-echo -e "${GREEN}✓${NC} Ngrok tunnel: ${YELLOW}$NGROK_URL${NC}"
+echo -e "${GREEN}✓${NC} localtunnel: ${YELLOW}$LOCALTUNNEL_URL${NC}"
 
 # Set Telegram webhook
-WEBHOOK_URL="$NGROK_URL/$TELEGRAM_TOKEN"
+WEBHOOK_URL="$LOCALTUNNEL_URL/$TELEGRAM_TOKEN"
 echo -e "\n${BLUE}Setting Telegram webhook...${NC}"
 echo -e "Webhook URL: ${YELLOW}$WEBHOOK_URL${NC}"
 
@@ -113,21 +130,20 @@ if echo "$RESPONSE" | grep -q '"ok":true'; then
 else
     echo -e "${RED}Error setting webhook:${NC}"
     echo "$RESPONSE"
-    kill $LANGGRAPH_PID $CHATBOT_PID $NGROK_PID 2>/dev/null
+    kill $LANGGRAPH_PID $CHATBOT_PID $LOCALTUNNEL_PID 2>/dev/null
     exit 1
 fi
 
 # Display status
 echo -e "\n${GREEN}=== Development Environment Running ===${NC}"
 echo -e "${BLUE}Services:${NC}"
-echo -e "  • LangGraph API: ${YELLOW}http://localhost:2024${NC}"
-echo -e "  • Chatbot Server: ${YELLOW}http://localhost:5000${NC}"
-echo -e "  • Ngrok Tunnel: ${YELLOW}$NGROK_URL${NC}"
-echo -e "  • Ngrok Dashboard: ${YELLOW}http://localhost:4040${NC}"
+echo -e "  • LangGraph API: ${YELLOW}http://localhost:${LANGGRAPH_PORT}${NC}"
+echo -e "  • Chatbot Server: ${YELLOW}http://localhost:${CHATBOT_PORT}${NC}"
+echo -e "  • localtunnel: ${YELLOW}$LOCALTUNNEL_URL${NC}"
 echo -e "\n${BLUE}Logs:${NC}"
 echo -e "  • LangGraph: ${YELLOW}tail -f logs/langgraph.log${NC}"
 echo -e "  • Chatbot: ${YELLOW}tail -f logs/chatbot.log${NC}"
-echo -e "  • Ngrok: ${YELLOW}tail -f logs/ngrok.log${NC}"
+echo -e "  • localtunnel: ${YELLOW}tail -f logs/localtunnel.log${NC}"
 echo -e "\n${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 
 # Keep script running

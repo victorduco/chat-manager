@@ -10,7 +10,9 @@ import asyncio
 logging.basicConfig(level=logging.INFO)
 
 
-server = ServerApp().app
+app = ServerApp()
+server = app.app
 
 if __name__ == "__main__":
-    server.run()
+    # Use ServerApp.run() so PORT env var and default host are respected.
+    app.run()

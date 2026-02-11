@@ -1,16 +1,16 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Set Telegram webhook to ngrok URL
+# Set Telegram webhook to a public tunnel URL (localtunnel/ngrok/etc.)
 
 set -e
 
 if [ -z "$1" ]; then
-    echo "Usage: $0 <ngrok-url>"
-    echo "Example: $0 https://abc123.ngrok.io"
+    echo "Usage: $0 <public-https-url>"
+    echo "Example: $0 https://example.loca.lt"
     exit 1
 fi
 
-NGROK_URL="$1"
+PUBLIC_URL="$1"
 
 # Load TELEGRAM_TOKEN from .env
 if [ ! -f ".env" ]; then
@@ -25,7 +25,7 @@ if [ -z "$TELEGRAM_TOKEN" ]; then
     exit 1
 fi
 
-WEBHOOK_URL="$NGROK_URL/$TELEGRAM_TOKEN"
+WEBHOOK_URL="$PUBLIC_URL/$TELEGRAM_TOKEN"
 
 echo "Setting webhook to: $WEBHOOK_URL"
 

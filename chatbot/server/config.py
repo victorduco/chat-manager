@@ -13,7 +13,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 if DEV_ENV:
-    LANGGRAPH_API_URL = "http://localhost:2024"
+    # Allow overriding for local dev (e.g. when running LangGraph on a different port).
+    LANGGRAPH_API_URL = os.getenv("LANGGRAPH_API_URL", "http://localhost:2024")
 
 else:
     LANGGRAPH_API_URL = os.getenv("LANGGRAPH_API_URL")

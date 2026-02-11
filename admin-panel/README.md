@@ -4,6 +4,7 @@ Web-based admin panel for managing LangGraph threads and viewing user intro stat
 
 ## Features
 
+- 🔄 **Environment Switcher**: Toggle between DEV (local) and PROD (Heroku) environments
 - 📋 **Thread List**: Browse all threads with filters (status, limit)
 - 👥 **User Management**: View all users in each thread with their intro status
 - ✅ **Intro Status**: Visual indicators for completed/incomplete intros
@@ -76,18 +77,23 @@ VITE_LANGGRAPH_API_URL=http://localhost:2024
 
 ## Usage
 
-1. **Browse Threads**:
+1. **Switch Environment**:
+   - Click **🔧 DEV** to connect to local development server (`http://localhost:2024`)
+   - Click **🚀 PROD** to connect to production Heroku server
+   - Selection is saved in browser localStorage
+
+2. **Browse Threads**:
    - Use filters in the left sidebar to filter by status
    - Adjust limit to load more/fewer threads
    - Click refresh to reload
 
-2. **View Thread Details**:
+3. **View Thread Details**:
    - Click on any thread in the list
    - View users with intro status (✅ completed, ❌ not completed)
    - See full conversation history
    - Check thread metadata and state
 
-3. **User Info**:
+4. **User Info**:
    - Each user card shows:
      - Name and username
      - Telegram ID

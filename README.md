@@ -9,9 +9,8 @@ AI-powered task management system with Telegram bot integration using LangGraph 
 # Install uv package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install ngrok (for local Telegram bot development)
-brew install ngrok  # macOS
-# or download from https://ngrok.com/download
+# Node.js is required for localtunnel (Telegram webhooks to localhost without registration)
+# https://nodejs.org
 ```
 
 ### Setup
@@ -44,8 +43,8 @@ cp .env.local .env
 
 This script will:
 - Start LangGraph API on `localhost:2024`
-- Start Chatbot server on `localhost:5000`
-- Create ngrok tunnel and set Telegram webhook automatically
+- Start Chatbot server on `localhost:5050` (override with `CHATBOT_PORT`)
+- Create localtunnel and set Telegram webhook automatically
 
 **Alternative: Manual setup (3 terminals)**
 ```bash
@@ -55,10 +54,10 @@ cd langgraph-app && uv run python -m langgraph_cli dev
 # Terminal 2: Chatbot Server
 cd chatbot && uv run python main.py
 
-# Terminal 3: Ngrok tunnel
-ngrok http 5000
+# Terminal 3: localtunnel (no registration)
+npx --yes localtunnel --port 5050
 # Copy the https URL and run:
-./scripts/set-webhook.sh https://YOUR-NGROK-URL.ngrok.io
+./scripts/set-webhook.sh https://YOUR-TUNNEL.loca.lt
 ```
 
 ### Debugging
@@ -67,10 +66,8 @@ View logs in real-time:
 ```bash
 tail -f logs/langgraph.log   # LangGraph API
 tail -f logs/chatbot.log      # Chatbot server
-tail -f logs/ngrok.log        # Ngrok tunnel
+tail -f logs/localtunnel.log  # localtunnel
 ```
-
-Ngrok dashboard: http://localhost:4040 (view all incoming webhook requests)
 
 ### Stop Services
 
@@ -83,9 +80,6 @@ pkill -f "langgraph_cli dev"
 
 # Stop Chatbot
 pkill -f "chatbot/main.py"
-
-# Stop ngrok
-pkill ngrok
 
 # Remove webhook (optional)
 curl "https://api.telegram.org/bot<YOUR_TOKEN>/deleteWebhook"

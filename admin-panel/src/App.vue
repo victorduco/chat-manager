@@ -4,7 +4,23 @@
       <div class="header-content">
         <h1>🤖 LangGraph Admin Panel</h1>
         <div class="header-info">
-          <span class="api-url">{{ apiUrl }}</span>
+          <div class="env-toggle">
+            <button
+              :class="['env-btn', { active: currentEnv === 'dev' }]"
+              @click="switchEnvironment('dev')"
+              title="Local development server"
+            >
+              🔧 DEV
+            </button>
+            <button
+              :class="['env-btn', { active: currentEnv === 'prod' }]"
+              @click="switchEnvironment('prod')"
+              title="Production Heroku server"
+            >
+              🚀 PROD
+            </button>
+          </div>
+          <span class="api-url" :title="apiUrl">{{ apiUrl }}</span>
         </div>
       </div>
     </header>
@@ -25,11 +41,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import ThreadsList from './components/ThreadsList.vue'
 import ThreadDetails from './components/ThreadDetails.vue'
+import { getCurrentEnvironment, setEnvironment, getCurrentApiUrl } from './services/api'
 
-const apiUrl = import.meta.env.VITE_LANGGRAPH_API_URL || 'https://langgraph-server.herokuapp.com'
+const currentEnv = ref(getCurrentEnvironment())
+const apiUrl = ref(getCurrentApiUrl())
 const selectedThreadId = ref(null)
 const threadsListRef = ref(null)
 
@@ -46,6 +64,32 @@ function handleThreadDeleted(threadId) {
     threadsListRef.value?.loadThreads?.()
   } catch (_) {}
 }
+
+function switchEnvironment(env) {
+  setEnvironment(env)
+  currentEnv.value = env
+  apiUrl.value = getCurrentApiUrl()
+
+  // Clear selection and reload threads
+  selectedThreadId.value = null
+  try {
+    threadsListRef.value?.loadThreads?.()
+  } catch (_) {}
+}
+
+// Listen for environment changes from other tabs/windows
+function handleEnvChange(event) {
+  currentEnv.value = event.detail
+  apiUrl.value = getCurrentApiUrl()
+}
+
+onMounted(() => {
+  window.addEventListener('api-environment-changed', handleEnvChange)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('api-environment-changed', handleEnvChange)
+})
 </script>
 
 <style>
@@ -92,6 +136,38 @@ body {
   gap: 1rem;
 }
 
+.env-toggle {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(255,255,255,0.15);
+  padding: 0.25rem;
+  border-radius: 6px;
+}
+
+.env-btn {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  opacity: 0.7;
+}
+
+.env-btn:hover {
+  opacity: 0.9;
+  background: rgba(255,255,255,0.1);
+}
+
+.env-btn.active {
+  background: rgba(255,255,255,0.3);
+  opacity: 1;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 .api-url {
   font-size: 0.875rem;
   opacity: 0.9;
@@ -99,6 +175,10 @@ body {
   background: rgba(255,255,255,0.2);
   padding: 0.25rem 0.75rem;
   border-radius: 4px;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-main {
@@ -159,6 +239,21 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
+  }
+
+  .header-info {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .api-url {
+    max-width: 100%;
+    font-size: 0.75rem;
+  }
+
+  .env-btn {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.8rem;
   }
 }
 </style>
