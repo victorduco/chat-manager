@@ -51,6 +51,20 @@
           <span v-else-if="graphError" class="graph-error">{{ graphError }}</span>
         </div>
 
+        <div class="daily-config">
+          <label class="daily-label">
+            <input
+              type="checkbox"
+              :disabled="dailyBusy || !threadId"
+              :checked="dailyRunnerEnabled"
+              @change="(e) => onToggleDailyRunner(e.target.checked)"
+            />
+            Daily runner
+          </label>
+          <span v-if="dailyBusy" class="daily-status">Saving...</span>
+          <span v-else-if="dailyError" class="daily-error">{{ dailyError }}</span>
+        </div>
+
         <button class="import-btn" @click="importOpen = !importOpen">
           {{ importOpen ? 'Hide' : 'Paste' }} YAML
         </button>
@@ -279,11 +293,19 @@ const deleteBusy = ref(false)
 const threadInfo = ref(null)
 const graphBusy = ref(false)
 const graphError = ref('')
+const dailyBusy = ref(false)
+const dailyError = ref('')
 
 const dispatchGraphValue = computed(() => {
   const meta = threadInfo.value?.metadata
   const v = meta && typeof meta === 'object' ? meta.dispatch_graph_id : null
   return (typeof v === 'string') ? v : (v == null ? '' : String(v))
+})
+
+const dailyRunnerEnabled = computed(() => {
+  const meta = threadInfo.value?.metadata
+  const v = meta && typeof meta === 'object' ? meta.daily_runner_enabled : false
+  return v === true
 })
 
 const users = computed(() => {
@@ -358,6 +380,21 @@ async function onChangeGraph(value) {
     graphError.value = e?.message || 'Failed to save graph'
   } finally {
     graphBusy.value = false
+  }
+}
+
+async function onToggleDailyRunner(enabled) {
+  if (!props.threadId) return
+  dailyError.value = ''
+
+  dailyBusy.value = true
+  try {
+    await mergeThreadMetadata(props.threadId, { daily_runner_enabled: !!enabled })
+    threadInfo.value = await getThread(props.threadId)
+  } catch (e) {
+    dailyError.value = e?.message || 'Failed to save daily runner setting'
+  } finally {
+    dailyBusy.value = false
   }
 }
 
@@ -635,6 +672,31 @@ watch(() => props.threadId, (newId) => {
 }
 
 .graph-error {
+  color: #c92a2a;
+  font-size: 0.9rem;
+}
+
+.daily-config {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.daily-label {
+  font-weight: 700;
+  color: #212529;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  user-select: none;
+}
+
+.daily-status {
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+.daily-error {
   color: #c92a2a;
   font-size: 0.9rem;
 }

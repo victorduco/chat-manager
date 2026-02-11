@@ -4,23 +4,91 @@ AI-powered task management system with Telegram bot integration using LangGraph 
 
 ## Quick Start
 
+### Prerequisites
 ```bash
 # Install uv package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# Install ngrok (for local Telegram bot development)
+brew install ngrok  # macOS
+# or download from https://ngrok.com/download
+```
+
+### Setup
+```bash
 # Clone and setup
 git clone https://github.com/yourusername/agent-taskmanager.git
 cd agent-taskmanager
-cp .env.example .env
-# Edit .env with your API keys
 
 # Install dependencies
 uv sync
+```
 
-# Run services (in separate terminals)
-cd langgraph-app && uv run python -m langgraph_cli dev  # Terminal 1
-cd chatbot && uv run python main.py                      # Terminal 2
-cd admin-panel && npm install && npm run dev             # Terminal 3 (optional)
+### Local Development (with Telegram Dev Bot)
+
+**Step 1: Create a dev bot**
+1. Open [@BotFather](https://t.me/botfather) in Telegram
+2. Send `/newbot` and follow instructions
+3. Save the bot token
+
+**Step 2: Configure environment**
+```bash
+cp .env.local .env
+# Edit .env and set TELEGRAM_TOKEN to your dev bot token
+```
+
+**Step 3: Run everything (automated)**
+```bash
+./scripts/run-dev.sh
+```
+
+This script will:
+- Start LangGraph API on `localhost:2024`
+- Start Chatbot server on `localhost:5000`
+- Create ngrok tunnel and set Telegram webhook automatically
+
+**Alternative: Manual setup (3 terminals)**
+```bash
+# Terminal 1: LangGraph API
+cd langgraph-app && uv run python -m langgraph_cli dev
+
+# Terminal 2: Chatbot Server
+cd chatbot && uv run python main.py
+
+# Terminal 3: Ngrok tunnel
+ngrok http 5000
+# Copy the https URL and run:
+./scripts/set-webhook.sh https://YOUR-NGROK-URL.ngrok.io
+```
+
+### Debugging
+
+View logs in real-time:
+```bash
+tail -f logs/langgraph.log   # LangGraph API
+tail -f logs/chatbot.log      # Chatbot server
+tail -f logs/ngrok.log        # Ngrok tunnel
+```
+
+Ngrok dashboard: http://localhost:4040 (view all incoming webhook requests)
+
+### Stop Services
+
+If using `run-dev.sh`: Press `Ctrl+C`
+
+If running manually:
+```bash
+# Stop LangGraph
+pkill -f "langgraph_cli dev"
+
+# Stop Chatbot
+pkill -f "chatbot/main.py"
+
+# Stop ngrok
+pkill ngrok
+
+# Remove webhook (optional)
+curl "https://api.telegram.org/bot<YOUR_TOKEN>/deleteWebhook"
 ```
 
 ## Architecture

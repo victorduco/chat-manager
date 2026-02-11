@@ -13,6 +13,7 @@ import traceback
 import logging
 from event_handlers.utils.stream.stream_queue import StreamQueue, MessageContent
 from pydantic import TypeAdapter
+import httpx
 
 
 class StreamProducer():
@@ -60,6 +61,17 @@ class StreamProducer():
             graph_id=requested_graph_id,
             if_exists="do_nothing",
         )
+
+        # Best-effort: store Telegram chat id on the LangGraph thread so cron jobs can
+        # message the right chat later. Do not fail the user message on errors here.
+        try:
+            await StreamProducer._merge_thread_metadata_http(
+                thread_id=thread["thread_id"],
+                partial={"chat_id": str(ctx.chat_id)},
+            )
+        except Exception:
+            logging.debug("Failed to persist chat_id to thread metadata", exc_info=True)
+
         dispatch_graph_id = await StreamProducer._get_dispatch_graph_id(client, thread["thread_id"])
         state = ExternalState()
         state.messages = [ctx.message]
@@ -78,6 +90,23 @@ class StreamProducer():
             config=config,
         )
         return thread, stream
+
+    @staticmethod
+    async def _merge_thread_metadata_http(thread_id: str, partial: dict) -> None:
+        """Merge metadata onto a thread via raw HTTP (SDK surface differs by version)."""
+        base = (LANGGRAPH_API_URL or "").rstrip("/")
+        if not base:
+            raise RuntimeError("LANGGRAPH_API_URL is not set")
+
+        timeout = httpx.Timeout(10.0)
+        async with httpx.AsyncClient(timeout=timeout) as http:
+            t = (await http.get(f"{base}/threads/{thread_id}")).json()
+            current = (t or {}).get("metadata") or {}
+            if not isinstance(current, dict):
+                current = {}
+            next_meta = {**current, **(partial or {})}
+            r = await http.patch(f"{base}/threads/{thread_id}", json={"metadata": next_meta})
+            r.raise_for_status()
 
     async def run(self):
         # run stream
