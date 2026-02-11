@@ -194,15 +194,13 @@ def intro_responder(state: InternalState) -> InternalState:
 
 
 def no_intro(state: InternalState, writer=None) -> InternalState:
-    """If intro not completed and current message isn't an intro, react with neutral emoji and exit."""
+    """If intro not completed and current message isn't an intro, react with thinking emoji and exit."""
     from conversation_states.actions import ActionSender
 
     if writer:
         try:
-            # Random neutral reaction instead of negative thumbs down
-            neutral_reactions = ["⏳", "🔄", "⏸️"]
-            reaction = random.choice(neutral_reactions)
-            ActionSender(writer).send_reaction(reaction)
+            # Thinking emoji instead of negative thumbs down
+            ActionSender(writer).send_reaction("🤔")
         except Exception:
             pass
 
