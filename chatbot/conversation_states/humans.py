@@ -11,6 +11,8 @@ class Human(BaseModel):
     intro_completed: bool = False  # Track if user has written intro
     # When set by an admin (e.g., via admin panel), keep the value stable across merges.
     intro_locked: bool = False
+    telegram_id: Optional[int] = None  # Telegram user ID for permissions
+    messages_without_intro: int = 0  # Count messages sent without intro
 
     def update_info(self, updates: dict[str, str] | list[dict[str, str]]) -> None:
         if isinstance(updates, dict):

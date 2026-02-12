@@ -3,8 +3,8 @@
 ## Prerequisites
 
 ```bash
-# Node.js is required (used by localtunnel via npx)
-# https://nodejs.org
+# cloudflared is required (used for public tunnel to localhost)
+# https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
 
 # Install dependencies
 uv sync
@@ -23,7 +23,7 @@ Run everything with one command:
 This will:
 - Start LangGraph API on port 2024
 - Start Chatbot server on port 5050 (override with `CHATBOT_PORT`)
-- Start localtunnel and configure webhook automatically
+- Start cloudflared tunnel and configure webhook automatically
 
 ### Option 2: Manual (3 Terminals)
 
@@ -39,11 +39,11 @@ cd chatbot
 uv run python main.py
 ```
 
-**Terminal 3 - localtunnel (no registration):**
+**Terminal 3 - cloudflared (no registration):**
 ```bash
-npx --yes localtunnel --port 5050
+cloudflared tunnel --url http://localhost:5050
 # Copy the HTTPS URL and set webhook:
-./scripts/set-webhook.sh https://YOUR-TUNNEL.loca.lt
+./scripts/set-webhook.sh https://YOUR-TUNNEL.trycloudflare.com
 ```
 
 **Terminal 4 (Optional) - Admin Panel:**
@@ -58,7 +58,7 @@ npm run dev
 |---------|------|-----|-------------|
 | LangGraph API | 2024 | http://localhost:2024 | AI workflows engine |
 | Chatbot Server | 5050 | http://localhost:5050 | Telegram bot webhook handler |
-| localtunnel | - | https://xxxx.loca.lt | Public tunnel to local server |
+| cloudflared | - | https://xxxx.trycloudflare.com | Public tunnel to local server |
 | Admin Panel | 3000 | http://localhost:3000 | Web UI for thread management |
 
 ## Environment Configuration
@@ -86,12 +86,12 @@ Your selection is saved in browser localStorage.
 ```bash
 tail -f logs/langgraph.log    # LangGraph API logs
 tail -f logs/chatbot.log       # Chatbot server logs
-tail -f logs/localtunnel.log   # localtunnel logs
+tail -f logs/cloudflared.log   # cloudflared logs
 ```
 
 ### Check Running Services
 ```bash
-ps aux | grep -E "langgraph|chatbot|localtunnel" | grep -v grep
+ps aux | grep -E "langgraph|chatbot|cloudflared" | grep -v grep
 ```
 
 ### Test Endpoints
@@ -102,10 +102,10 @@ curl http://localhost:5050     # Chatbot server (should show "dev_env")
 
 ## Troubleshooting
 
-### localtunnel fails to start
-Try again (it may be transient), or request a different subdomain:
+### cloudflared fails to start
+Try restarting services:
 ```bash
-LOCALTUNNEL_SUBDOMAIN=atm-dev ./scripts/run-dev.sh
+./scripts/run-dev.sh
 ```
 
 ### Port already in use
@@ -113,11 +113,11 @@ LOCALTUNNEL_SUBDOMAIN=atm-dev ./scripts/run-dev.sh
 # Stop existing processes
 pkill -f "langgraph_cli dev"
 pkill -f "chatbot/main.py"
-pkill -f "localtunnel"
+pkill -f "cloudflared"
 ```
 
 ### Webhook not receiving messages
-1. Check localtunnel is running: `tail -f logs/localtunnel.log`
+1. Check cloudflared is running: `tail -f logs/cloudflared.log`
 2. Verify webhook is set:
    ```bash
    curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
@@ -138,7 +138,7 @@ Press `Ctrl+C` to stop all services
 ```bash
 pkill -f "langgraph_cli dev"
 pkill -f "chatbot/main.py"
-pkill -f "localtunnel"
+pkill -f "cloudflared"
 pkill -f "vite"  # Stop admin panel
 ```
 
@@ -155,7 +155,7 @@ pkill -f "vite"  # Stop admin panel
 |--------|------------|------------|
 | LangGraph | localhost:2024 | Heroku |
 | Chatbot | localhost:5050 | Heroku |
-| Webhook | localtunnel | Direct HTTPS |
+| Webhook | cloudflared | Direct HTTPS |
 | Database | Local SQLite | Heroku Postgres |
 | Environment | DEV_ENV=True | DEV_ENV=False |
 

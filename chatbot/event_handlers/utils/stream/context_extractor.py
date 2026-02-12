@@ -46,6 +46,7 @@ class ContextExtractor(BaseModel):
                 additional_kwargs={
                     "chat_id": chat_id,
                     "tg_chat_id": chat_id,
+                    "tg_user_id": str(user_data.id),
                     "tg_message_id": message_id,
                     "tg_date": tg_date.isoformat() if isinstance(tg_date, datetime) else None,
                     "tg_link": msg_link,

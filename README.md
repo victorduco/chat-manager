@@ -9,8 +9,8 @@ AI-powered task management system with Telegram bot integration using LangGraph 
 # Install uv package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Node.js is required for localtunnel (Telegram webhooks to localhost without registration)
-# https://nodejs.org
+# cloudflared is required for Telegram webhooks to localhost (no registration)
+# https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
 ```
 
 ### Setup
@@ -44,7 +44,7 @@ cp .env.local .env
 This script will:
 - Start LangGraph API on `localhost:2024`
 - Start Chatbot server on `localhost:5050` (override with `CHATBOT_PORT`)
-- Create localtunnel and set Telegram webhook automatically
+- Create cloudflared tunnel and set Telegram webhook automatically
 
 **Alternative: Manual setup (3 terminals)**
 ```bash
@@ -54,10 +54,10 @@ cd langgraph-app && uv run python -m langgraph_cli dev
 # Terminal 2: Chatbot Server
 cd chatbot && uv run python main.py
 
-# Terminal 3: localtunnel (no registration)
-npx --yes localtunnel --port 5050
+# Terminal 3: cloudflared tunnel (no registration)
+cloudflared tunnel --url http://localhost:5050
 # Copy the https URL and run:
-./scripts/set-webhook.sh https://YOUR-TUNNEL.loca.lt
+./scripts/set-webhook.sh https://YOUR-TUNNEL.trycloudflare.com
 ```
 
 ### Debugging
@@ -66,7 +66,7 @@ View logs in real-time:
 ```bash
 tail -f logs/langgraph.log   # LangGraph API
 tail -f logs/chatbot.log      # Chatbot server
-tail -f logs/localtunnel.log  # localtunnel
+tail -f logs/cloudflared.log  # cloudflared tunnel
 ```
 
 ### Stop Services

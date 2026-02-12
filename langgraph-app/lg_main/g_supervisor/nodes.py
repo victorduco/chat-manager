@@ -143,15 +143,23 @@ def intro_checker(state: InternalState, writer: StreamWriter | None = None) -> I
             logging.info(f"Sent ❤ reaction to user {sender.username} - intro completed now")
 
             # Unrestrict user if they were restricted
-            if sender.telegram_id:
-                chat_id = state.external_messages_api.last()[0].additional_kwargs.get("chat_id")
-                if chat_id:
-                    import json
-                    action_sender.send_action(Action(
-                        type="unrestrict",
-                        value=json.dumps({"user_id": sender.telegram_id, "chat_id": int(chat_id)})
-                    ))
-                    logging.info(f"Sent unrestrict action for user {sender.username}")
+            user_id = sender.telegram_id
+            last_message = state.external_messages_api.last()[0]
+            chat_id = last_message.additional_kwargs.get("chat_id")
+            if user_id is None:
+                raw_uid = last_message.additional_kwargs.get("tg_user_id")
+                try:
+                    user_id = int(raw_uid) if raw_uid is not None else None
+                except (TypeError, ValueError):
+                    user_id = None
+
+            if user_id is not None and chat_id:
+                import json
+                action_sender.send_action(Action(
+                    type="unrestrict",
+                    value=json.dumps({"user_id": int(user_id), "chat_id": int(chat_id)})
+                ))
+                logging.info(f"Sent unrestrict action for user {sender.username}")
         else:
             # Non-intro messages are handled by other graphs (e.g. chat_manager).
             logging.info(f"No intro reaction sent to user {sender.username}")
@@ -246,20 +254,31 @@ def no_intro(state: InternalState, writer=None) -> InternalState:
                     value="Достигнут лимит сообщений без представления. Отправка сообщений ограничена. Напишите #intro для снятия ограничений."
                 ))
                 # Restrict user from sending messages
-                logging.info(f"User {sender.username} reached 10 messages. Attempting to restrict. telegram_id={sender.telegram_id}")
-                if sender.telegram_id:
-                    chat_id = state.external_messages_api.last()[0].additional_kwargs.get("chat_id")
-                    logging.info(f"Got chat_id from message: {chat_id}")
-                    if chat_id:
-                        logging.info(f"Sending restrict action for user_id={sender.telegram_id}, chat_id={chat_id}")
-                        action_sender.send_restrict(
-                            user_id=sender.telegram_id,
-                            chat_id=int(chat_id)
-                        )
-                    else:
-                        logging.warning(f"No chat_id found in message for user {sender.username}")
+                user_id = sender.telegram_id
+                last_message = state.external_messages_api.last()[0]
+                chat_id = last_message.additional_kwargs.get("chat_id")
+                if user_id is None:
+                    # Backward-compatible fallback for old checkpoints where
+                    # sender.telegram_id might be missing.
+                    raw_uid = last_message.additional_kwargs.get("tg_user_id")
+                    try:
+                        user_id = int(raw_uid) if raw_uid is not None else None
+                    except (TypeError, ValueError):
+                        user_id = None
+
+                logging.info(f"User {sender.username} reached 10 messages. Attempting to restrict. telegram_id={user_id}")
+                logging.info(f"Got chat_id from message: {chat_id}")
+                if user_id is not None and chat_id:
+                    logging.info(f"Sending restrict action for user_id={user_id}, chat_id={chat_id}")
+                    action_sender.send_restrict(
+                        user_id=int(user_id),
+                        chat_id=int(chat_id)
+                    )
                 else:
-                    logging.warning(f"No telegram_id for user {sender.username}")
+                    if user_id is None:
+                        logging.warning(f"No telegram_id for user {sender.username}")
+                    if not chat_id:
+                        logging.warning(f"No chat_id found in message for user {sender.username}")
         except Exception:
             pass
 
@@ -276,6 +295,12 @@ def mention_checker(state: InternalState, writer: StreamWriter | None = None) ->
 
     text = getattr(state.last_external_message, "content", "") or ""
     t = text.lower()
+    chat_id_raw = getattr(state.last_external_message, "additional_kwargs", {}).get("chat_id")
+    is_private_chat = False
+    try:
+        is_private_chat = int(str(chat_id_raw)) > 0
+    except (TypeError, ValueError):
+        is_private_chat = False
 
     # Configurable mention tokens.
     # Example: BOT_MENTION_TOKENS="victorai,викор,@victorai,@victorducoai_bot"
@@ -286,8 +311,11 @@ def mention_checker(state: InternalState, writer: StreamWriter | None = None) ->
     ).strip()
     tokens = [x.strip().lower() for x in raw.split(",") if x.strip()]
 
-    mentioned = False
+    # In private chats the bot is always directly addressed.
+    mentioned = is_private_chat
     for tok in tokens:
+        if mentioned:
+            break
         if not tok:
             continue
         if tok.startswith("@"):

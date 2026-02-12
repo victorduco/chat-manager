@@ -36,16 +36,19 @@ class StreamProducer():
         return self
 
     @staticmethod
-    async def _get_dispatch_graph_id(client: LangGraphClient, thread_id: str) -> str | None:
-        """Return per-thread dispatch target from LangGraph thread metadata."""
+    async def _get_thread_target_graph_id(client: LangGraphClient, thread_id: str) -> str | None:
+        """Return per-thread target graph id from LangGraph thread metadata."""
         try:
             t = await client.threads.get(thread_id)
             meta = (t or {}).get("metadata") or {}
-            v = meta.get("dispatch_graph_id")
-            if v is None:
-                return None
-            v = str(v).strip()
-            return v if v else None
+            for key in ("dispatch_graph_id", "target_graph_id", "graph_id"):
+                v = meta.get(key)
+                if v is None:
+                    continue
+                v = str(v).strip()
+                if v:
+                    return v
+            return None
         except Exception:
             # Best-effort: if we can't read metadata, fall back to default behavior.
             return None
@@ -72,7 +75,7 @@ class StreamProducer():
         except Exception:
             logging.debug("Failed to persist chat_id to thread metadata", exc_info=True)
 
-        dispatch_graph_id = await StreamProducer._get_dispatch_graph_id(client, thread["thread_id"])
+        dispatch_graph_id = await StreamProducer._get_thread_target_graph_id(client, thread["thread_id"])
         state = ExternalState()
         state.messages = [ctx.message]
         state.users = [ctx.user]
