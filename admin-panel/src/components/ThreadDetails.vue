@@ -19,17 +19,25 @@
     <div v-else-if="state" class="details-content">
       <!-- Thread Info Header -->
       <div class="thread-header">
-        <div class="info-item">
-          <label>Thread ID:</label>
-          <code class="thread-id-full">{{ threadId }}</code>
+        <div class="thread-header-top">
+          <h2 class="thread-title">
+            {{ chatTitle || 'Thread Details' }}
+            <span v-if="chatId" class="chat-id-badge">{{ chatId }}</span>
+          </h2>
         </div>
-        <div class="info-item" v-if="state.created_at">
-          <label>Created:</label>
-          <span>{{ formatDateTime(state.created_at) }}</span>
-        </div>
-        <div class="info-item" v-if="state.updated_at">
-          <label>Updated:</label>
-          <span>{{ formatDateTime(state.updated_at) }}</span>
+        <div class="thread-header-meta">
+          <div class="info-item">
+            <label>Thread ID:</label>
+            <code class="thread-id-full">{{ threadId }}</code>
+          </div>
+          <div class="info-item" v-if="state.created_at">
+            <label>Created:</label>
+            <span>{{ formatDateTime(state.created_at) }}</span>
+          </div>
+          <div class="info-item" v-if="state.updated_at">
+            <label>Updated:</label>
+            <span>{{ formatDateTime(state.updated_at) }}</span>
+          </div>
         </div>
       </div>
 
@@ -332,6 +340,16 @@ const memoryRecords = computed(() => {
 
 const deleteBlockedByUsers = computed(() => {
   return users.value.length > 5
+})
+
+const chatId = computed(() => {
+  const meta = threadInfo.value?.metadata
+  return meta && typeof meta === 'object' ? meta.chat_id : null
+})
+
+const chatTitle = computed(() => {
+  const meta = threadInfo.value?.metadata
+  return meta && typeof meta === 'object' ? meta.chat_title : null
 })
 
 const pendingIcon = computed(() => {
@@ -884,8 +902,37 @@ watch(() => props.threadId, (newId) => {
   padding: 1rem 1.5rem;
   background: #f8f9fa;
   border-bottom: 1px solid #dee2e6;
+}
+
+.thread-header-top {
+  margin-bottom: 1rem;
+}
+
+.thread-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #212529;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.chat-id-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: monospace;
+  background: #e7f5ff;
+  color: #1971c2;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.thread-header-meta {
   display: flex;
   gap: 2rem;
+  flex-wrap: wrap;
 }
 
 .info-item {
