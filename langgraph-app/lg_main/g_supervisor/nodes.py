@@ -222,7 +222,7 @@ def no_intro(state: InternalState, writer=None) -> InternalState:
             if count == 3:
                 action_sender.send_action(Action(
                     type="system-message",
-                    value="Согласно правилам клуба, участникам необходимо представиться. Расскажите о себе для нашего комьюнити в сообщении с тегом #intro.\n\nОтправлено 3 из 10 сообщений. После 10 сообщений — блокировка."
+                    value="Согласно правилам клуба, участникам необходимо представиться. Расскажите о себе для нашего комьюнити в сообщении с тегом #intro.\n\nОтправлено 3 из 10 сообщений. После 10 сообщений возможность отправки сообщений будет ограничена."
                 ))
             elif count == 7:
                 action_sender.send_action(Action(
@@ -232,7 +232,7 @@ def no_intro(state: InternalState, writer=None) -> InternalState:
             elif count >= 10:
                 action_sender.send_action(Action(
                     type="system-message",
-                    value="Достигнут лимит сообщений. Напишите сообщение с тегом #intro для продолжения общения."
+                    value="Достигнут лимит сообщений без представления. Отправка сообщений ограничена. Напишите #intro для снятия ограничений."
                 ))
         except Exception:
             pass
