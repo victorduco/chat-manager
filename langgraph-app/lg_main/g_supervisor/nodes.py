@@ -246,13 +246,20 @@ def no_intro(state: InternalState, writer=None) -> InternalState:
                     value="Достигнут лимит сообщений без представления. Отправка сообщений ограничена. Напишите #intro для снятия ограничений."
                 ))
                 # Restrict user from sending messages
+                logging.info(f"User {sender.username} reached 10 messages. Attempting to restrict. telegram_id={sender.telegram_id}")
                 if sender.telegram_id:
                     chat_id = state.external_messages_api.last()[0].additional_kwargs.get("chat_id")
+                    logging.info(f"Got chat_id from message: {chat_id}")
                     if chat_id:
+                        logging.info(f"Sending restrict action for user_id={sender.telegram_id}, chat_id={chat_id}")
                         action_sender.send_restrict(
                             user_id=sender.telegram_id,
                             chat_id=int(chat_id)
                         )
+                    else:
+                        logging.warning(f"No chat_id found in message for user {sender.username}")
+                else:
+                    logging.warning(f"No telegram_id for user {sender.username}")
         except Exception:
             pass
 

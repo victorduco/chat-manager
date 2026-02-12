@@ -44,6 +44,7 @@ echo -e "${BLUE}Starting services...${NC}\n"
 LANGGRAPH_PORT="${LANGGRAPH_PORT:-2024}"
 # macOS often has services on 5000; default to a safer port.
 CHATBOT_PORT="${CHATBOT_PORT:-5050}"
+ADMIN_PANEL_PORT="${ADMIN_PANEL_PORT:-3000}"
 
 # Function to cleanup on exit
 cleanup() {
@@ -54,7 +55,7 @@ cleanup() {
 trap cleanup INT TERM
 
 # Start LangGraph in background
-echo -e "${BLUE}[1/3] Starting LangGraph API on port ${LANGGRAPH_PORT}...${NC}"
+echo -e "${BLUE}[1/4] Starting LangGraph API on port ${LANGGRAPH_PORT}...${NC}"
 uv run --all-packages --directory langgraph-app \
     python -m langgraph_cli dev --port "${LANGGRAPH_PORT}" > logs/langgraph.log 2>&1 &
 LANGGRAPH_PID=$!
@@ -70,7 +71,7 @@ fi
 echo -e "${GREEN}✓${NC} LangGraph API running on http://localhost:${LANGGRAPH_PORT}"
 
 # Start chatbot server in background
-echo -e "\n${BLUE}[2/3] Starting Chatbot server on port ${CHATBOT_PORT}...${NC}"
+echo -e "\n${BLUE}[2/4] Starting Chatbot server on port ${CHATBOT_PORT}...${NC}"
 PORT="${CHATBOT_PORT}" LANGGRAPH_API_URL="http://localhost:${LANGGRAPH_PORT}" \
     uv run --all-packages --directory chatbot python main.py > logs/chatbot.log 2>&1 &
 CHATBOT_PID=$!
@@ -85,8 +86,24 @@ if ! curl -s "http://localhost:${CHATBOT_PORT}" > /dev/null; then
 fi
 echo -e "${GREEN}✓${NC} Chatbot server running on http://localhost:${CHATBOT_PORT}"
 
+# Start admin panel in background
+echo -e "\n${BLUE}[3/4] Starting Admin Panel on port ${ADMIN_PANEL_PORT}...${NC}"
+cd admin-panel && npm run dev > ../logs/admin-panel.log 2>&1 &
+ADMIN_PANEL_PID=$!
+cd ..
+
+# Wait for admin panel to start
+sleep 3
+if ! curl -s "http://localhost:${ADMIN_PANEL_PORT}" > /dev/null; then
+    echo -e "${RED}Error: Admin Panel failed to start${NC}"
+    echo -e "Check logs/admin-panel.log for details"
+    kill $LANGGRAPH_PID $CHATBOT_PID $ADMIN_PANEL_PID 2>/dev/null
+    exit 1
+fi
+echo -e "${GREEN}✓${NC} Admin Panel running on http://localhost:${ADMIN_PANEL_PORT}"
+
 # Start localtunnel
-echo -e "\n${BLUE}[3/3] Starting localtunnel...${NC}"
+echo -e "\n${BLUE}[4/4] Starting localtunnel...${NC}"
 
 # Optional: request a stable subdomain (may fail if already taken)
 # Example: LOCALTUNNEL_SUBDOMAIN=my-dev-bot ./scripts/run-dev.sh
@@ -112,7 +129,7 @@ done
 if [ -z "$LOCALTUNNEL_URL" ]; then
     echo -e "${RED}Error: Could not get localtunnel URL${NC}"
     echo -e "Check logs/localtunnel.log for details"
-    kill $LANGGRAPH_PID $CHATBOT_PID $LOCALTUNNEL_PID 2>/dev/null
+    kill $LANGGRAPH_PID $CHATBOT_PID $ADMIN_PANEL_PID $LOCALTUNNEL_PID 2>/dev/null
     exit 1
 fi
 
@@ -130,7 +147,7 @@ if echo "$RESPONSE" | grep -q '"ok":true'; then
 else
     echo -e "${RED}Error setting webhook:${NC}"
     echo "$RESPONSE"
-    kill $LANGGRAPH_PID $CHATBOT_PID $LOCALTUNNEL_PID 2>/dev/null
+    kill $LANGGRAPH_PID $CHATBOT_PID $ADMIN_PANEL_PID $LOCALTUNNEL_PID 2>/dev/null
     exit 1
 fi
 
@@ -139,10 +156,12 @@ echo -e "\n${GREEN}=== Development Environment Running ===${NC}"
 echo -e "${BLUE}Services:${NC}"
 echo -e "  • LangGraph API: ${YELLOW}http://localhost:${LANGGRAPH_PORT}${NC}"
 echo -e "  • Chatbot Server: ${YELLOW}http://localhost:${CHATBOT_PORT}${NC}"
+echo -e "  • Admin Panel: ${YELLOW}http://localhost:${ADMIN_PANEL_PORT}${NC}"
 echo -e "  • localtunnel: ${YELLOW}$LOCALTUNNEL_URL${NC}"
 echo -e "\n${BLUE}Logs:${NC}"
 echo -e "  • LangGraph: ${YELLOW}tail -f logs/langgraph.log${NC}"
 echo -e "  • Chatbot: ${YELLOW}tail -f logs/chatbot.log${NC}"
+echo -e "  • Admin Panel: ${YELLOW}tail -f logs/admin-panel.log${NC}"
 echo -e "  • localtunnel: ${YELLOW}tail -f logs/localtunnel.log${NC}"
 echo -e "\n${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 
