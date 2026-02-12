@@ -4,6 +4,7 @@ from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 import logging
 import os
+from .setup_menu_button import setup_menu_button_for_chat
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,13 @@ async def handle_webapp_command(update: Update, context: ContextTypes.DEFAULT_TY
 
     logger.info(f"Opening webapp for chat_id={chat_id}, chat_type={chat_type}")
 
+    # Set up menu button for this chat (so user can easily access mini app later)
+    try:
+        bot = context.bot if hasattr(context, 'bot') else update.get_bot()
+        await setup_menu_button_for_chat(bot, chat_id)
+    except Exception as e:
+        logger.warning(f"Failed to set menu button: {e}")
+
     # Encode chat_id in start_param so mini app can retrieve it
     # Format: chat_-1002557941720 (matches the pattern in miniapp/src/services/telegram.js)
     start_param = f"chat_{chat_id}"
@@ -65,12 +73,13 @@ async def handle_webapp_command(update: Update, context: ContextTypes.DEFAULT_TY
         )
         logger.info(f"Sent webapp button for private chat with start_param={start_param}")
     else:
-        # In groups, send direct link
+        # In groups, tell user to use the menu button
         response_text = (
             f"🎯 Mini App для чата: {chat_title}\n\n"
             f"Chat ID: `{chat_id}`\n\n"
-            f"🔗 Откройте Mini App по ссылке:\n{webapp_url}"
+            f"📱 Кликните на кнопку **Menu** (☰) рядом с полем ввода → выберите **Mini App**\n\n"
+            f"Или откройте напрямую (может не работать):\n{webapp_url}"
         )
 
         await message.reply_text(response_text)
-        logger.info(f"Sent webapp link for group chat with start_param={start_param}")
+        logger.info(f"Sent webapp instructions for group chat with start_param={start_param}")
