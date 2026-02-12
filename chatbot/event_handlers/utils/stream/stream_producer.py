@@ -65,15 +65,19 @@ class StreamProducer():
             if_exists="do_nothing",
         )
 
-        # Best-effort: store Telegram chat id on the LangGraph thread so cron jobs can
-        # message the right chat later. Do not fail the user message on errors here.
+        # Best-effort: store Telegram chat id and title on the LangGraph thread so cron jobs can
+        # message the right chat later and admin panel can show chat info.
         try:
+            chat_title = getattr(ctx.tg_message.chat, "title", None) or getattr(ctx.tg_message.chat, "username", None)
+            metadata_update = {"chat_id": str(ctx.chat_id)}
+            if chat_title:
+                metadata_update["chat_title"] = str(chat_title)
             await StreamProducer._merge_thread_metadata_http(
                 thread_id=thread["thread_id"],
-                partial={"chat_id": str(ctx.chat_id)},
+                partial=metadata_update,
             )
         except Exception:
-            logging.debug("Failed to persist chat_id to thread metadata", exc_info=True)
+            logging.debug("Failed to persist chat_id/chat_title to thread metadata", exc_info=True)
 
         dispatch_graph_id = await StreamProducer._get_thread_target_graph_id(client, thread["thread_id"])
         state = ExternalState()
