@@ -126,10 +126,12 @@ def intro_checker(state: InternalState, writer: StreamWriter | None = None) -> I
     # Mark intro as completed if found in current message
     if has_intro_now and not sender.intro_completed:
         sender.intro_completed = True
+        sender.messages_without_intro = 0  # Reset counter when intro is completed
         logging.info(f"User {sender.username} completed intro with hashtag #intro in current message")
     elif has_intro_before and not sender.intro_completed and not sender_intro_locked:
         # Keep state consistent: if we detect past #intro, consider intro completed.
         sender.intro_completed = True
+        sender.messages_without_intro = 0  # Reset counter
         logging.info(f"User {sender.username} already had #intro in history; marking intro_completed=True")
 
     # Send reaction based on intro status
@@ -195,16 +197,47 @@ def intro_responder(state: InternalState) -> InternalState:
 
 def no_intro(state: InternalState, writer=None) -> InternalState:
     """If intro not completed and current message isn't an intro, react with thinking emoji and exit."""
-    from conversation_states.actions import ActionSender
+    from conversation_states.actions import ActionSender, Action
+
+    sender = state.last_sender
+    if not sender:
+        response = SystemMessage(content="", name="no_intro_skip")
+        state.reasoning_messages = [response]
+        return state
+
+    # Increment message counter
+    sender.messages_without_intro += 1
+    count = sender.messages_without_intro
 
     if writer:
+        action_sender = ActionSender(writer)
         try:
-            # Thinking emoji instead of negative thumbs down
-            ActionSender(writer).send_reaction("🤔")
+            # Thinking emoji reaction
+            action_sender.send_reaction("🤔")
         except Exception:
             pass
 
-    # No text response.
+        # Send warning messages at specific thresholds
+        try:
+            if count == 3:
+                action_sender.send_action(Action(
+                    type="system-message",
+                    value="Согласно правилам клуба, участникам необходимо представиться. Напишите сообщение с тегом #intro, чтобы рассказать о себе."
+                ))
+            elif count == 7:
+                action_sender.send_action(Action(
+                    type="system-message",
+                    value="Вы отправили 7 из 10 допустимых сообщений без представления. Пожалуйста, расскажите клубу о себе с тегом #intro."
+                ))
+            elif count >= 10:
+                action_sender.send_action(Action(
+                    type="system-message",
+                    value="Достигнут лимит сообщений без представления. Пожалуйста, напишите сообщение с тегом #intro."
+                ))
+        except Exception:
+            pass
+
+    # No text response from AI.
     response = SystemMessage(content="", name="no_intro_skip")
     state.reasoning_messages = [response]
     return state
