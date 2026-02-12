@@ -56,49 +56,70 @@ trap cleanup INT TERM
 
 # Start LangGraph in background
 echo -e "${BLUE}[1/4] Starting LangGraph API on port ${LANGGRAPH_PORT}...${NC}"
-uv run --all-packages --directory langgraph-app \
-    python -m langgraph_cli dev --port "${LANGGRAPH_PORT}" > logs/langgraph.log 2>&1 &
-LANGGRAPH_PID=$!
 
-# Wait for LangGraph to start
-sleep 5
-if ! curl -s "http://localhost:${LANGGRAPH_PORT}" > /dev/null; then
-    echo -e "${RED}Error: LangGraph failed to start${NC}"
-    echo -e "Check logs/langgraph.log for details"
-    kill $LANGGRAPH_PID 2>/dev/null
-    exit 1
+# Check if port is already in use
+if lsof -Pi :${LANGGRAPH_PORT} -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+    echo -e "${YELLOW}⚠${NC}  LangGraph already running on port ${LANGGRAPH_PORT}"
+    LANGGRAPH_PID=$(lsof -Pi :${LANGGRAPH_PORT} -sTCP:LISTEN -t)
+else
+    uv run --all-packages --directory langgraph-app \
+        python -m langgraph_cli dev --port "${LANGGRAPH_PORT}" > logs/langgraph.log 2>&1 &
+    LANGGRAPH_PID=$!
+
+    # Wait for LangGraph to start
+    sleep 5
+    if ! curl -s "http://localhost:${LANGGRAPH_PORT}" > /dev/null; then
+        echo -e "${RED}Error: LangGraph failed to start${NC}"
+        echo -e "Check logs/langgraph.log for details"
+        kill $LANGGRAPH_PID 2>/dev/null
+        exit 1
+    fi
 fi
 echo -e "${GREEN}✓${NC} LangGraph API running on http://localhost:${LANGGRAPH_PORT}"
 
 # Start chatbot server in background
 echo -e "\n${BLUE}[2/4] Starting Chatbot server on port ${CHATBOT_PORT}...${NC}"
-PORT="${CHATBOT_PORT}" LANGGRAPH_API_URL="http://localhost:${LANGGRAPH_PORT}" \
-    uv run --all-packages --directory chatbot python main.py > logs/chatbot.log 2>&1 &
-CHATBOT_PID=$!
 
-# Wait for chatbot to start
-sleep 3
-if ! curl -s "http://localhost:${CHATBOT_PORT}" > /dev/null; then
-    echo -e "${RED}Error: Chatbot server failed to start${NC}"
-    echo -e "Check logs/chatbot.log for details"
-    kill $LANGGRAPH_PID $CHATBOT_PID 2>/dev/null
-    exit 1
+# Check if port is already in use
+if lsof -Pi :${CHATBOT_PORT} -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+    echo -e "${YELLOW}⚠${NC}  Chatbot already running on port ${CHATBOT_PORT}"
+    CHATBOT_PID=$(lsof -Pi :${CHATBOT_PORT} -sTCP:LISTEN -t)
+else
+    PORT="${CHATBOT_PORT}" LANGGRAPH_API_URL="http://localhost:${LANGGRAPH_PORT}" \
+        uv run --all-packages --directory chatbot python main.py > logs/chatbot.log 2>&1 &
+    CHATBOT_PID=$!
+
+    # Wait for chatbot to start
+    sleep 3
+    if ! curl -s "http://localhost:${CHATBOT_PORT}" > /dev/null; then
+        echo -e "${RED}Error: Chatbot server failed to start${NC}"
+        echo -e "Check logs/chatbot.log for details"
+        kill $LANGGRAPH_PID $CHATBOT_PID 2>/dev/null
+        exit 1
+    fi
 fi
 echo -e "${GREEN}✓${NC} Chatbot server running on http://localhost:${CHATBOT_PORT}"
 
 # Start admin panel in background
 echo -e "\n${BLUE}[3/4] Starting Admin Panel on port ${ADMIN_PANEL_PORT}...${NC}"
-cd admin-panel && npm run dev > ../logs/admin-panel.log 2>&1 &
-ADMIN_PANEL_PID=$!
-cd ..
 
-# Wait for admin panel to start
-sleep 3
-if ! curl -s "http://localhost:${ADMIN_PANEL_PORT}" > /dev/null; then
-    echo -e "${RED}Error: Admin Panel failed to start${NC}"
-    echo -e "Check logs/admin-panel.log for details"
-    kill $LANGGRAPH_PID $CHATBOT_PID $ADMIN_PANEL_PID 2>/dev/null
-    exit 1
+# Check if port is already in use
+if lsof -Pi :${ADMIN_PANEL_PORT} -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+    echo -e "${YELLOW}⚠${NC}  Admin Panel already running on port ${ADMIN_PANEL_PORT}"
+    ADMIN_PANEL_PID=$(lsof -Pi :${ADMIN_PANEL_PORT} -sTCP:LISTEN -t)
+else
+    cd admin-panel && npm run dev > ../logs/admin-panel.log 2>&1 &
+    ADMIN_PANEL_PID=$!
+    cd ..
+
+    # Wait for admin panel to start
+    sleep 3
+    if ! curl -s "http://localhost:${ADMIN_PANEL_PORT}" > /dev/null; then
+        echo -e "${RED}Error: Admin Panel failed to start${NC}"
+        echo -e "Check logs/admin-panel.log for details"
+        kill $LANGGRAPH_PID $CHATBOT_PID $ADMIN_PANEL_PID 2>/dev/null
+        exit 1
+    fi
 fi
 echo -e "${GREEN}✓${NC} Admin Panel running on http://localhost:${ADMIN_PANEL_PORT}"
 
@@ -112,6 +133,9 @@ LT_ARGS=(--port "${CHATBOT_PORT}")
 if [ -n "${LOCALTUNNEL_SUBDOMAIN:-}" ]; then
     LT_ARGS+=(--subdomain "${LOCALTUNNEL_SUBDOMAIN}")
 fi
+
+# Ensure log file exists
+touch logs/localtunnel.log
 
 npx --yes localtunnel "${LT_ARGS[@]}" > logs/localtunnel.log 2>&1 &
 LOCALTUNNEL_PID=$!
