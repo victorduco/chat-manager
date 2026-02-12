@@ -47,32 +47,30 @@ async def handle_webapp_command(update: Update, context: ContextTypes.DEFAULT_TY
     # Build WebApp URL with start parameter
     webapp_url = f"{MINIAPP_URL}?startapp={start_param}"
 
-    # Create reply keyboard with WebApp button
-    # Note: WebApp buttons work in ReplyKeyboard but not InlineKeyboard in groups
-    keyboard = ReplyKeyboardMarkup([
-        [KeyboardButton(
-            text="🚀 Открыть Mini App",
-            web_app=WebAppInfo(url=webapp_url)
-        )]
-    ], resize_keyboard=True, one_time_keyboard=True)
-
-    # Send message with button
+    # For private chats: use WebApp button
+    # For groups: send direct link (WebApp buttons don't work in groups)
     if chat_type == "private":
-        response_text = (
-            "🎯 Открыть Mini App\n\n"
-            "Нажмите кнопку ниже 👇"
+        keyboard = ReplyKeyboardMarkup([
+            [KeyboardButton(
+                text="🚀 Открыть Mini App",
+                web_app=WebAppInfo(url=webapp_url)
+            )]
+        ], resize_keyboard=True, one_time_keyboard=True)
+
+        response_text = "🎯 Открыть Mini App\n\nНажмите кнопку ниже 👇"
+
+        await message.reply_text(
+            response_text,
+            reply_markup=keyboard
         )
+        logger.info(f"Sent webapp button for private chat with start_param={start_param}")
     else:
+        # In groups, send direct link
         response_text = (
             f"🎯 Mini App для чата: {chat_title}\n\n"
-            f"Chat ID: {chat_id}\n"
-            f"Тип: {chat_type}\n\n"
-            "Нажмите кнопку ниже 👇"
+            f"Chat ID: `{chat_id}`\n\n"
+            f"🔗 Откройте Mini App по ссылке:\n{webapp_url}"
         )
 
-    await message.reply_text(
-        response_text,
-        reply_markup=keyboard
-    )
-
-    logger.info(f"Sent webapp button with start_param={start_param}")
+        await message.reply_text(response_text)
+        logger.info(f"Sent webapp link for group chat with start_param={start_param}")
