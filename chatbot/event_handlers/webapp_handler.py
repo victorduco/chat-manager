@@ -1,6 +1,6 @@
 """Handler for /webapp command - opens mini app with correct chat_id parameter."""
 
-from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 import logging
 import os
@@ -47,31 +47,31 @@ async def handle_webapp_command(update: Update, context: ContextTypes.DEFAULT_TY
     # Build WebApp URL with start parameter
     webapp_url = f"{MINIAPP_URL}?startapp={start_param}"
 
-    # Create inline button with WebApp
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(
+    # Create reply keyboard with WebApp button
+    # Note: WebApp buttons work in ReplyKeyboard but not InlineKeyboard in groups
+    keyboard = ReplyKeyboardMarkup([
+        [KeyboardButton(
             text="🚀 Открыть Mini App",
             web_app=WebAppInfo(url=webapp_url)
         )]
-    ])
+    ], resize_keyboard=True, one_time_keyboard=True)
 
     # Send message with button
     if chat_type == "private":
         response_text = (
-            "🎯 **Открыть Mini App**\n\n"
+            "🎯 Открыть Mini App\n\n"
             "Нажмите кнопку ниже 👇"
         )
     else:
         response_text = (
-            f"🎯 Mini App для чата: **{chat_title}**\n\n"
-            f"Chat ID: `{chat_id}`\n"
+            f"🎯 Mini App для чата: {chat_title}\n\n"
+            f"Chat ID: {chat_id}\n"
             f"Тип: {chat_type}\n\n"
-            "Нажмите кнопку ниже, чтобы открыть Mini App 👇"
+            "Нажмите кнопку ниже 👇"
         )
 
     await message.reply_text(
         response_text,
-        parse_mode="Markdown",
         reply_markup=keyboard
     )
 
