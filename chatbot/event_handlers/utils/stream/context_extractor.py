@@ -19,14 +19,18 @@ class ContextExtractor(BaseModel):
 
     @classmethod
     def from_update(cls, update: Update, context: ContextTypes.DEFAULT_TYPE, content_type: Literal["text", "command"]):
-        user_data = update.message.from_user
-        chat_id = str(update.message.chat.id)
-        tg_message = update.message
-        chat_username = getattr(update.message.chat, "username", None)
+        # Handle different update types (message, edited_message, channel_post, etc.)
+        tg_message = update.message or update.edited_message or update.channel_post or update.edited_channel_post
+        if not tg_message:
+            raise ValueError("Update does not contain a message")
+
+        user_data = tg_message.from_user
+        chat_id = str(tg_message.chat.id)
+        chat_username = getattr(tg_message.chat, "username", None)
         thread_id = cls.chat_to_thread(chat_id)
         username = user_data.username or f"user{user_data.id}"
-        message_id = getattr(update.message, "message_id", None)
-        tg_date = getattr(update.message, "date", None)
+        message_id = getattr(tg_message, "message_id", None)
+        tg_date = getattr(tg_message, "date", None)
         if isinstance(tg_date, datetime) and tg_date.tzinfo is None:
             tg_date = tg_date.replace(tzinfo=timezone.utc)
 
@@ -40,7 +44,7 @@ class ContextExtractor(BaseModel):
             thread_id=thread_id,
             tg_message=tg_message,
             message=HumanMessage(
-                content=str(update.message.text),
+                content=str(tg_message.text),
                 type="human",
                 name=username,
                 additional_kwargs={
