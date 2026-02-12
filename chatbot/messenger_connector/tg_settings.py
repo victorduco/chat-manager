@@ -5,9 +5,9 @@ from telegram import BotCommand
 from functools import partial
 
 
-# Commands are now managed via config and only shown to authorized users
-# Commands will not appear in Telegram's command menu to maintain privacy
+# Commands shown in Telegram's command menu
 TELEGRAM_COMMANDS = [
+    BotCommand("webapp", "Открыть Mini App"),
     # Admin commands (not shown in menu, but still work):
     # /show_all_users - Show all users with intro status (admin only)
 ]
