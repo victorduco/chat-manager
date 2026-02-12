@@ -5,7 +5,9 @@ from .message_responder import MessageResponder, sanitize_html
 import asyncio
 from typing import Any
 from conversation_states.actions import Reaction, Action
-from telegram import Message as TgMessage
+from telegram import Message as TgMessage, ChatPermissions
+import json
+import logging
 
 
 class StreamConsumer():
@@ -64,6 +66,10 @@ class StreamConsumer():
                     await self.reaction_responder(item)
                 case "system-message":
                     await self.system_message_responder(item)
+                case "restrict":
+                    await self.restrict_responder(item)
+                case "unrestrict":
+                    await self.unrestrict_responder(item)
                 # case "image":
                 #     await image_responder(item)
 
@@ -84,3 +90,59 @@ class StreamConsumer():
             await self.tg_message.reply_text(
                 text=f"{chunk}",
                 parse_mode=ParseMode.HTML)
+
+    async def restrict_responder(self, item: Action):
+        """Restrict user from sending messages in the chat."""
+        try:
+            # Parse restrict action value
+            restrict_data = json.loads(item.value)
+            user_id = restrict_data["user_id"]
+            chat_id = restrict_data["chat_id"]
+
+            # Restrict permissions: user cannot send messages
+            permissions = ChatPermissions(
+                can_send_messages=False,
+                can_send_media_messages=False,
+                can_send_polls=False,
+                can_send_other_messages=False,
+                can_add_web_page_previews=False,
+            )
+
+            # Apply restriction using Telegram bot API
+            await self.tg_message.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                permissions=permissions
+            )
+
+            logging.info(f"Restricted user {user_id} in chat {chat_id}")
+        except Exception as e:
+            logging.error(f"Failed to restrict user: {e}", exc_info=True)
+
+    async def unrestrict_responder(self, item: Action):
+        """Unrestrict user, allowing them to send messages again."""
+        try:
+            # Parse unrestrict action value
+            restrict_data = json.loads(item.value)
+            user_id = restrict_data["user_id"]
+            chat_id = restrict_data["chat_id"]
+
+            # Allow all permissions again
+            permissions = ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_polls=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+            )
+
+            # Remove restriction
+            await self.tg_message.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                permissions=permissions
+            )
+
+            logging.info(f"Unrestricted user {user_id} in chat {chat_id}")
+        except Exception as e:
+            logging.error(f"Failed to unrestrict user: {e}", exc_info=True)

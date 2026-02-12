@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from langgraph.types import StreamWriter
 
 ActionType = Literal["image", "gif", "voice", "reaction",
-                     "sticker", "system-message", "system-notification"]
+                     "sticker", "system-message", "system-notification", "restrict", "unrestrict"]
 Reaction = Literal[
     "👍", "👎", "❤", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱", "🤬", "😢", "🎉", "🤩", "🤮",
     "💩", "🙏", "👌", "🕊", "🤡", "🥱", "🥴", "😍", "🐳", "❤‍🔥", "🌚", "🌭", "💯", "🤣", "⚡",
@@ -31,5 +31,14 @@ class ActionSender:
         action = Action(
             type="reaction",
             value=reaction
+        )
+        self.send_action(action)
+
+    def send_restrict(self, user_id: int, chat_id: int):
+        """Send restrict action with user and chat IDs."""
+        import json
+        action = Action(
+            type="restrict",
+            value=json.dumps({"user_id": user_id, "chat_id": chat_id})
         )
         self.send_action(action)

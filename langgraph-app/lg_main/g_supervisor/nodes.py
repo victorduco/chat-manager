@@ -141,6 +141,17 @@ def intro_checker(state: InternalState, writer: StreamWriter | None = None) -> I
             # User just completed intro NOW - send heart
             action_sender.send_reaction("❤")
             logging.info(f"Sent ❤ reaction to user {sender.username} - intro completed now")
+
+            # Unrestrict user if they were restricted
+            if sender.telegram_id:
+                chat_id = state.external_messages_api.last()[0].additional_kwargs.get("chat_id")
+                if chat_id:
+                    import json
+                    action_sender.send_action(Action(
+                        type="unrestrict",
+                        value=json.dumps({"user_id": sender.telegram_id, "chat_id": int(chat_id)})
+                    ))
+                    logging.info(f"Sent unrestrict action for user {sender.username}")
         else:
             # Non-intro messages are handled by other graphs (e.g. chat_manager).
             logging.info(f"No intro reaction sent to user {sender.username}")
@@ -234,6 +245,14 @@ def no_intro(state: InternalState, writer=None) -> InternalState:
                     type="system-message",
                     value="Достигнут лимит сообщений без представления. Отправка сообщений ограничена. Напишите #intro для снятия ограничений."
                 ))
+                # Restrict user from sending messages
+                if sender.telegram_id:
+                    chat_id = state.external_messages_api.last()[0].additional_kwargs.get("chat_id")
+                    if chat_id:
+                        action_sender.send_restrict(
+                            user_id=sender.telegram_id,
+                            chat_id=int(chat_id)
+                        )
         except Exception:
             pass
 
