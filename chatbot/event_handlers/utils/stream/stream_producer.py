@@ -36,22 +36,38 @@ class StreamProducer():
         return self
 
     @staticmethod
-    async def _get_thread_target_graph_id(client: LangGraphClient, thread_id: str) -> str | None:
-        """Return per-thread target graph id from LangGraph thread metadata."""
+    async def _get_thread_metadata(client: LangGraphClient, thread_id: str) -> dict:
+        """Return thread metadata dict (best effort)."""
         try:
             t = await client.threads.get(thread_id)
             meta = (t or {}).get("metadata") or {}
-            for key in ("dispatch_graph_id", "target_graph_id", "graph_id"):
-                v = meta.get(key)
-                if v is None:
-                    continue
-                v = str(v).strip()
-                if v:
-                    return v
-            return None
+            return meta if isinstance(meta, dict) else {}
         except Exception:
-            # Best-effort: if we can't read metadata, fall back to default behavior.
-            return None
+            return {}
+
+    @staticmethod
+    def _thread_target_graph_id_from_metadata(meta: dict) -> str | None:
+        for key in ("dispatch_graph_id", "target_graph_id", "graph_id"):
+            v = meta.get(key)
+            if v is None:
+                continue
+            v = str(v).strip()
+            if v:
+                return v
+        return None
+
+    @staticmethod
+    def _require_intro_from_metadata(meta: dict) -> bool:
+        # Default-on for backward compatibility.
+        raw = meta.get("require_intro", True)
+        if isinstance(raw, bool):
+            return raw
+        v = str(raw).strip().lower()
+        if v in {"false", "0", "no", "off"}:
+            return False
+        if v in {"true", "1", "yes", "on"}:
+            return True
+        return True
 
     @staticmethod
     async def prep_stream(client, ctx):
@@ -79,8 +95,25 @@ class StreamProducer():
         except Exception:
             logging.debug("Failed to persist chat_id/chat_title to thread metadata", exc_info=True)
 
-        dispatch_graph_id = await StreamProducer._get_thread_target_graph_id(client, thread["thread_id"])
+        # Ensure default thread-level intro requirement exists for new/old threads,
+        # but never overwrite an explicit false value.
+        meta = await StreamProducer._get_thread_metadata(client, thread["thread_id"])
+        if "require_intro" not in meta:
+            try:
+                await StreamProducer._merge_thread_metadata_http(
+                    thread_id=thread["thread_id"],
+                    partial={"require_intro": True},
+                )
+                meta = {**meta, "require_intro": True}
+            except Exception:
+                logging.debug("Failed to persist default require_intro=true", exc_info=True)
+
+        dispatch_graph_id = StreamProducer._thread_target_graph_id_from_metadata(meta)
+        require_intro = StreamProducer._require_intro_from_metadata(meta)
         state = ExternalState()
+        msg_kwargs = dict(getattr(ctx.message, "additional_kwargs", {}) or {})
+        msg_kwargs["require_intro"] = require_intro
+        ctx.message.additional_kwargs = msg_kwargs
         state.messages = [ctx.message]
         state.users = [ctx.user]
 

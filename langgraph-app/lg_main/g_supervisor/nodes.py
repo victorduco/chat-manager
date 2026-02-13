@@ -96,8 +96,27 @@ def _has_intro_hashtag(state: InternalState) -> bool:
     return "#intro" in _extract_message_text(state).lower()
 
 
+def _is_intro_required_for_message(state: InternalState) -> bool:
+    kwargs = getattr(getattr(state, "last_external_message", None), "additional_kwargs", {}) or {}
+    raw = kwargs.get("require_intro")
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return True
+    v = str(raw).strip().lower()
+    if v in {"false", "0", "no", "off"}:
+        return False
+    if v in {"true", "1", "yes", "on"}:
+        return True
+    return True
+
+
 def intro_checker(state: InternalState, writer: StreamWriter | None = None) -> InternalState:
     """Detect #intro and keep user intro status in sync without sending reply/reactions."""
+    if not _is_intro_required_for_message(state):
+        state.intro_hashtag_detected = False
+        state.intro_quality_passed = False
+        return state
 
     sender = state.last_sender
     sender_intro_locked = bool(getattr(sender, "intro_locked", False))

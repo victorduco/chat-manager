@@ -2,25 +2,22 @@
   <div id="app">
     <header class="app-header">
       <div class="header-content">
-        <h1>🤖 LangGraph Admin Panel</h1>
-        <div class="header-info">
-          <div class="env-toggle">
-            <button
-              :class="['env-btn', { active: currentEnv === 'dev' }]"
-              @click="switchEnvironment('dev')"
-              title="Local development server"
-            >
-              🔧 DEV
-            </button>
-            <button
-              :class="['env-btn', { active: currentEnv === 'prod' }]"
-              @click="switchEnvironment('prod')"
-              title="Production Heroku server"
-            >
-              🚀 PROD
-            </button>
-          </div>
-          <span class="api-url" :title="apiUrl">{{ apiUrl }}</span>
+        <h1>Admin Panel</h1>
+        <div class="env-toggle">
+          <button
+            :class="['env-btn', { active: currentEnv === 'dev' }]"
+            @click="switchEnvironment('dev')"
+            title="Local development server"
+          >
+            🔧 DEV
+          </button>
+          <button
+            :class="['env-btn', { active: currentEnv === 'prod' }]"
+            @click="switchEnvironment('prod')"
+            title="Production Heroku server"
+          >
+            🚀 PROD
+          </button>
         </div>
       </div>
     </header>
@@ -29,30 +26,45 @@
       <aside class="sidebar">
         <ThreadsList
           ref="threadsListRef"
+          :selected-thread-id="selectedThreadId"
           @thread-selected="handleThreadSelected"
         />
       </aside>
 
       <section class="content">
-        <ThreadDetails :thread-id="selectedThreadId" @thread-deleted="handleThreadDeleted" />
+        <ThreadDetails
+          :thread-id="selectedThreadId"
+          :initial-tab="selectedTab"
+          @thread-deleted="handleThreadDeleted"
+          @tab-changed="handleTabChanged"
+        />
       </section>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import ThreadsList from './components/ThreadsList.vue'
 import ThreadDetails from './components/ThreadDetails.vue'
-import { getCurrentEnvironment, setEnvironment, getCurrentApiUrl } from './services/api'
+import { getCurrentEnvironment, setEnvironment } from './services/api'
+
+const VALID_ENVS = new Set(['dev', 'prod'])
+const VALID_TABS = new Set(['users', 'messages', 'records', 'highlights'])
 
 const currentEnv = ref(getCurrentEnvironment())
-const apiUrl = ref(getCurrentApiUrl())
 const selectedThreadId = ref(null)
+const selectedTab = ref('users')
 const threadsListRef = ref(null)
 
 function handleThreadSelected(threadId) {
   selectedThreadId.value = threadId
+}
+
+function handleTabChanged(tab) {
+  if (VALID_TABS.has(tab)) {
+    selectedTab.value = tab
+  }
 }
 
 function handleThreadDeleted(threadId) {
@@ -66,29 +78,69 @@ function handleThreadDeleted(threadId) {
 }
 
 function switchEnvironment(env) {
+  if (!VALID_ENVS.has(env)) return
   setEnvironment(env)
   currentEnv.value = env
-  apiUrl.value = getCurrentApiUrl()
 
-  // Clear selection and reload threads
-  selectedThreadId.value = null
+  // Reload threads for selected environment.
   try {
     threadsListRef.value?.loadThreads?.()
   } catch (_) {}
 }
 
+function getUrlState() {
+  const params = new URLSearchParams(window.location.search)
+  const env = params.get('env')
+  const thread = params.get('thread')
+  const tab = params.get('tab')
+  return {
+    env: VALID_ENVS.has(String(env || '')) ? String(env) : null,
+    thread: thread ? String(thread) : null,
+    tab: VALID_TABS.has(String(tab || '')) ? String(tab) : null,
+  }
+}
+
+function syncStateToUrl() {
+  const params = new URLSearchParams(window.location.search)
+  params.set('env', currentEnv.value)
+
+  if (selectedThreadId.value) params.set('thread', selectedThreadId.value)
+  else params.delete('thread')
+
+  if (selectedTab.value) params.set('tab', selectedTab.value)
+  else params.delete('tab')
+
+  const next = `${window.location.pathname}?${params.toString()}`
+  window.history.replaceState({}, '', next)
+}
+
 // Listen for environment changes from other tabs/windows
 function handleEnvChange(event) {
   currentEnv.value = event.detail
-  apiUrl.value = getCurrentApiUrl()
 }
 
 onMounted(() => {
   window.addEventListener('api-environment-changed', handleEnvChange)
+  const urlState = getUrlState()
+  if (urlState.env && urlState.env !== currentEnv.value) {
+    setEnvironment(urlState.env)
+    currentEnv.value = urlState.env
+  }
+  if (urlState.thread) {
+    selectedThreadId.value = urlState.thread
+  }
+  if (urlState.tab) {
+    selectedTab.value = urlState.tab
+  }
+  syncStateToUrl()
 })
 
 onUnmounted(() => {
   window.removeEventListener('api-environment-changed', handleEnvChange)
+})
+
+watch([currentEnv, selectedThreadId, selectedTab], () => {
+  syncStateToUrl()
 })
 </script>
 
@@ -100,23 +152,25 @@ onUnmounted(() => {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: Manrope, "IBM Plex Sans", "SF Pro Text", "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color: #0f172a;
 }
 
 #app {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #f8f9fa;
+  background: #f8fafc;
 }
 
 .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem 2rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: #0f172a;
+  color: #ffffff;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid #1e293b;
+  box-shadow: 0 2px 8px rgba(2, 6, 23, 0.35);
 }
 
 .header-content {
@@ -126,59 +180,43 @@ body {
 }
 
 .app-header h1 {
-  font-size: 1.5rem;
+  font-size: 1.15rem;
   font-weight: 700;
-}
-
-.header-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+  letter-spacing: 0.01em;
+  color: #ffffff;
 }
 
 .env-toggle {
   display: flex;
   gap: 0.5rem;
-  background: rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.12);
   padding: 0.25rem;
-  border-radius: 6px;
+  border-radius: 10px;
 }
 
 .env-btn {
   background: transparent;
-  border: none;
-  color: white;
-  font-size: 0.875rem;
+  border: 1px solid transparent;
+  color: #e2e8f0;
+  font-size: 0.82rem;
   font-weight: 600;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
+  padding: 0.42rem 0.82rem;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
-  opacity: 0.7;
+  opacity: 0.9;
 }
 
 .env-btn:hover {
-  opacity: 0.9;
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .env-btn.active {
-  background: rgba(255,255,255,0.3);
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #ffffff;
   opacity: 1;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.api-url {
-  font-size: 0.875rem;
-  opacity: 0.9;
-  font-family: monospace;
-  background: rgba(255,255,255,0.2);
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  max-width: 400px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .app-main {
@@ -189,10 +227,11 @@ body {
 }
 
 .sidebar {
-  background: #f8f9fa;
+  background: #f8fafc;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  border-right: 1px solid #e2e8f0;
 }
 
 .content {
@@ -239,16 +278,6 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
-  }
-
-  .header-info {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .api-url {
-    max-width: 100%;
-    font-size: 0.75rem;
   }
 
   .env-btn {

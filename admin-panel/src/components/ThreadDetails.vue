@@ -22,70 +22,105 @@
         <div class="thread-header-top">
           <h2 class="thread-title">
             {{ chatTitle || 'Thread Details' }}
-            <span v-if="chatId" class="chat-id-badge">{{ chatId }}</span>
           </h2>
-        </div>
-        <div class="thread-header-meta">
-          <div class="info-item">
-            <label>Thread ID:</label>
-            <code class="thread-id-full">{{ threadId }}</code>
-          </div>
-          <div class="info-item" v-if="state.created_at">
-            <label>Created:</label>
-            <span>{{ formatDateTime(state.created_at) }}</span>
-          </div>
-          <div class="info-item" v-if="state.updated_at">
-            <label>Updated:</label>
-            <span>{{ formatDateTime(state.updated_at) }}</span>
+          <div class="header-popovers">
+            <div class="popover-anchor">
+              <button class="header-btn" @click="toggleInfoPopover">
+                ℹ️ Info
+              </button>
+              <div v-if="infoPopoverOpen" class="popover-card">
+                <div class="popover-title">Thread Info</div>
+                <div class="popover-row">
+                  <span class="popover-label">Thread ID</span>
+                  <code class="popover-value code">{{ threadId }}</code>
+                </div>
+                <div class="popover-row">
+                  <span class="popover-label">Telegram Chat ID</span>
+                  <code class="popover-value code">{{ chatId || '—' }}</code>
+                </div>
+                <div class="popover-row">
+                  <span class="popover-label">Created</span>
+                  <span class="popover-value">{{ infoCreatedAt ? formatDateTime(infoCreatedAt) : '—' }}</span>
+                </div>
+                <div class="popover-row">
+                  <span class="popover-label">Updated</span>
+                  <span class="popover-value">{{ infoUpdatedAt ? formatDateTime(infoUpdatedAt) : '—' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="popover-anchor">
+              <button class="header-btn" @click="toggleSettingsPopover">
+                ⚙️ Settings
+              </button>
+              <div v-if="settingsPopoverOpen" class="popover-card settings-card">
+                <div class="settings-grid">
+                  <div class="settings-group settings-group-full">
+                    <label class="graph-label">Graph</label>
+                    <select
+                      class="graph-select"
+                      :disabled="graphBusy || !threadId"
+                      :value="dispatchGraphValue"
+                      @change="(e) => onChangeGraph(e.target.value)"
+                    >
+                      <option value="">Default (auto)</option>
+                      <option value="graph_supervisor">graph_supervisor</option>
+                      <option value="graph_router">graph_router</option>
+                      <option value="graph_chat_manager">graph_chat_manager</option>
+                    </select>
+                    <span v-if="graphBusy" class="graph-status">Saving...</span>
+                    <span v-else-if="graphError" class="graph-error">{{ graphError }}</span>
+                  </div>
+
+                  <div class="settings-group">
+                    <label class="daily-label">
+                      <input
+                        type="checkbox"
+                        :disabled="dailyBusy || !threadId"
+                        :checked="dailyRunnerEnabled"
+                        @change="(e) => onToggleDailyRunner(e.target.checked)"
+                      />
+                      Daily runner
+                    </label>
+                    <span v-if="dailyBusy" class="daily-status">Saving...</span>
+                    <span v-else-if="dailyError" class="daily-error">{{ dailyError }}</span>
+                  </div>
+
+                  <div class="settings-group">
+                    <label class="daily-label">
+                      <input
+                        type="checkbox"
+                        :disabled="introSettingBusy || !threadId"
+                        :checked="requireIntroEnabled"
+                        @change="(e) => onToggleRequireIntro(e.target.checked)"
+                      />
+                      Require intro
+                    </label>
+                    <span v-if="introSettingBusy" class="daily-status">Saving...</span>
+                    <span v-else-if="introSettingError" class="daily-error">{{ introSettingError }}</span>
+                  </div>
+                </div>
+
+                <div class="settings-buttons">
+                  <button class="import-btn" @click="importOpen = !importOpen">
+                    {{ importOpen ? 'Hide' : 'Paste' }} YAML
+                  </button>
+                  <button
+                    class="delete-btn"
+                    :disabled="deleteBusy || deleteBlockedByUsers"
+                    :title="deleteBlockedByUsers ? 'Deletion is disabled for threads with more than 5 users.' : ''"
+                    @click="onDeleteThread"
+                  >
+                    {{ deleteBusy ? 'Deleting...' : 'Delete Thread' }}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="header-actions">
-        <div class="graph-config">
-          <label class="graph-label">Graph:</label>
-          <select
-            class="graph-select"
-            :disabled="graphBusy || !threadId"
-            :value="dispatchGraphValue"
-            @change="(e) => onChangeGraph(e.target.value)"
-          >
-            <option value="">Default (auto)</option>
-            <option value="graph_supervisor">graph_supervisor</option>
-            <option value="graph_router">graph_router</option>
-            <option value="graph_chat_manager">graph_chat_manager</option>
-          </select>
-          <span v-if="graphBusy" class="graph-status">Saving...</span>
-          <span v-else-if="graphError" class="graph-error">{{ graphError }}</span>
-        </div>
-
-        <div class="daily-config">
-          <label class="daily-label">
-            <input
-              type="checkbox"
-              :disabled="dailyBusy || !threadId"
-              :checked="dailyRunnerEnabled"
-              @change="(e) => onToggleDailyRunner(e.target.checked)"
-            />
-            Daily runner
-          </label>
-          <span v-if="dailyBusy" class="daily-status">Saving...</span>
-          <span v-else-if="dailyError" class="daily-error">{{ dailyError }}</span>
-        </div>
-
-        <button class="import-btn" @click="importOpen = !importOpen">
-          {{ importOpen ? 'Hide' : 'Paste' }} YAML
-        </button>
-        <button
-          class="delete-btn"
-          :disabled="deleteBusy || deleteBlockedByUsers"
-          :title="deleteBlockedByUsers ? 'Deletion is disabled for threads with more than 5 users.' : ''"
-          @click="onDeleteThread"
-        >
-          {{ deleteBusy ? 'Deleting...' : 'Delete Thread' }}
-        </button>
-        <span v-if="importStatus" class="import-status">{{ importStatus }}</span>
-      </div>
+      <div v-if="importStatus" class="import-status-line">{{ importStatus }}</div>
 
       <div v-if="importOpen" class="import-panel">
         <div class="import-help">
@@ -161,38 +196,19 @@
           <table class="users-table">
             <thead>
               <tr>
-                <th>Status</th>
-                <th>Edit Intro</th>
                 <th>Name</th>
                 <th>Username</th>
                 <th>Telegram ID</th>
-                <th>Preferred Name</th>
                 <th>Information</th>
+                <th>Records</th>
+                <th class="intro-header">Intro</th>
               </tr>
             </thead>
             <tbody>
               <tr
                 v-for="(user, index) in users"
                 :key="index"
-                :class="{ 'intro-completed': user.intro_completed }"
               >
-                <td class="status-cell">
-                  <span class="status-badge" :class="{ completed: user.intro_completed }">
-                    {{ user.intro_completed ? '✅ Done' : `${pendingIcon} Pending` }}
-                  </span>
-                </td>
-                <td class="edit-cell">
-                  <select
-                    class="intro-select"
-                    :disabled="savingUserKey === userKey(user, index) || (!user.username && !user.telegram_id)"
-                    :value="user.intro_completed ? 'done' : 'pending'"
-                    @change="(e) => onChangeIntro(user, index, e.target.value)"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="done">Done</option>
-                  </select>
-                  <span v-if="savingUserKey === userKey(user, index)" class="saving">Saving...</span>
-                </td>
                 <td class="name-cell">
                   {{ user.first_name }} {{ user.last_name || '' }}
                 </td>
@@ -203,12 +219,73 @@
                   <code v-if="user.telegram_id">{{ user.telegram_id }}</code>
                   <span v-else class="na">N/A</span>
                 </td>
-                <td class="preferred-cell">
-                  {{ user.preferred_name || '—' }}
+                <td class="records-user-cell">
+                  <div class="records-user-row">
+                    <span class="records-count">{{ getUserInformationEntries(user).length }}</span>
+                    <button
+                      class="records-popover-btn"
+                      type="button"
+                      title="Show information"
+                      @click.stop="toggleUserInfoPopover(user, index)"
+                    >
+                      🧾
+                    </button>
+                  </div>
+                  <div v-if="userInfoPopoverKey === userKey(user, index)" class="user-records-popover">
+                    <div class="user-records-title">Information</div>
+                    <div v-if="getUserInformationEntries(user).length === 0" class="user-records-empty">No information</div>
+                    <div v-else class="user-records-list">
+                      <div v-for="(entry, entryIdx) in getUserInformationEntries(user)" :key="`${entry[0]}-${entryIdx}`" class="user-record-item">
+                        <div class="user-record-meta">
+                          <code>{{ entry[0] }}</code>
+                        </div>
+                        <div class="user-record-text">{{ entry[1] }}</div>
+                      </div>
+                    </div>
+                  </div>
                 </td>
-                <td class="info-cell">
-                  <span v-if="!user.information || Object.keys(user.information).length === 0" class="na">—</span>
-                  <pre v-else class="info-json">{{ JSON.stringify(user.information, null, 2) }}</pre>
+                <td class="records-user-cell">
+                  <div class="records-user-row">
+                    <span class="records-count">{{ getUserRecords(user).length }}</span>
+                    <button
+                      class="records-popover-btn"
+                      type="button"
+                      title="Show records"
+                      @click.stop="toggleUserRecordsPopover(user, index)"
+                    >
+                      🗂
+                    </button>
+                  </div>
+                  <div v-if="userRecordsPopoverKey === userKey(user, index)" class="user-records-popover">
+                    <div class="user-records-title">Records</div>
+                    <div v-if="getUserRecords(user).length === 0" class="user-records-empty">No records</div>
+                    <div v-else class="user-records-list">
+                      <div v-for="(rec, recIdx) in getUserRecords(user)" :key="rec.id || recIdx" class="user-record-item">
+                        <div class="user-record-meta">
+                          <code>{{ rec.category || '—' }}</code>
+                          <span>{{ formatDateTime(rec.created_at) || '—' }}</span>
+                        </div>
+                        <div class="user-record-text">{{ rec.text || '' }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td class="intro-status-cell">
+                  <div class="intro-status-row">
+                    <span class="status-badge" :class="{ completed: user.intro_completed }">
+                      {{ user.intro_completed ? '✅ Done' : `${pendingIcon} Pending (${user.messages_without_intro ?? 0})` }}
+                    </span>
+                    <select
+                      class="intro-select"
+                      :disabled="savingUserKey === userKey(user, index) || (!user.username && !user.telegram_id)"
+                      :value="user.intro_completed ? 'done' : 'pending'"
+                      @change="(e) => onChangeIntro(user, index, e.target.value)"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="done">Done</option>
+                    </select>
+                    <span v-if="savingUserKey === userKey(user, index)" class="saving">Saving...</span>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -217,7 +294,7 @@
       </div>
 
       <!-- Messages Tab -->
-      <div v-show="activeTab === 'messages'" class="tab-content">
+      <div v-show="activeTab === 'messages'" ref="messagesTabRef" class="tab-content">
         <div v-if="messages.length === 0" class="no-data">
           No messages found in this thread
         </div>
@@ -340,7 +417,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { getThreadState, getThread, setThreadMetadata, setIntroStatus, upsertUsers, deleteThread, mergeThreadMetadata } from '../services/api'
 import YAML from 'js-yaml'
 
@@ -348,10 +425,14 @@ const props = defineProps({
   threadId: {
     type: String,
     default: null
+  },
+  initialTab: {
+    type: String,
+    default: 'users'
   }
 })
 
-const emit = defineEmits(['thread-deleted'])
+const emit = defineEmits(['thread-deleted', 'tab-changed'])
 
 const state = ref(null)
 const loading = ref(false)
@@ -369,6 +450,16 @@ const graphBusy = ref(false)
 const graphError = ref('')
 const dailyBusy = ref(false)
 const dailyError = ref('')
+const introSettingBusy = ref(false)
+const introSettingError = ref('')
+const infoPopoverOpen = ref(false)
+const settingsPopoverOpen = ref(false)
+const userRecordsPopoverKey = ref(null)
+const userInfoPopoverKey = ref(null)
+const messagesTabRef = ref(null)
+const VALID_TABS = new Set(['users', 'messages', 'records', 'highlights'])
+const AUTO_REFRESH_MS = 5000
+let detailRefreshTimer = null
 
 const dispatchGraphValue = computed(() => {
   const meta = threadInfo.value?.metadata
@@ -380,6 +471,17 @@ const dailyRunnerEnabled = computed(() => {
   const meta = threadInfo.value?.metadata
   const v = meta && typeof meta === 'object' ? meta.daily_runner_enabled : false
   return v === true
+})
+
+const requireIntroEnabled = computed(() => {
+  const meta = threadInfo.value?.metadata
+  const raw = meta && typeof meta === 'object' ? meta.require_intro : true
+  if (raw === false) return false
+  if (raw === true || raw == null) return true
+  const v = String(raw).trim().toLowerCase()
+  if (['false', '0', 'no', 'off'].includes(v)) return false
+  if (['true', '1', 'yes', 'on'].includes(v)) return true
+  return true
 })
 
 const users = computed(() => {
@@ -429,18 +531,28 @@ const chatTitle = computed(() => {
   return meta && typeof meta === 'object' ? meta.chat_title : null
 })
 
+const infoCreatedAt = computed(() => {
+  return threadInfo.value?.created_at || state.value?.created_at || null
+})
+
+const infoUpdatedAt = computed(() => {
+  return threadInfo.value?.updated_at || state.value?.updated_at || null
+})
+
 const pendingIcon = computed(() => {
   const icons = ['⏳', '🔄', '⏸️']
   const index = (props.threadId?.charCodeAt(0) || 0) % icons.length
   return icons[index]
 })
 
-async function loadThreadState() {
+async function loadThreadState({ silent = false } = {}) {
   if (!props.threadId) return
 
-  loading.value = true
-  error.value = null
-  state.value = null
+  if (!silent) {
+    loading.value = true
+    error.value = null
+    state.value = null
+  }
 
   try {
     state.value = await getThreadState(props.threadId)
@@ -448,13 +560,19 @@ async function loadThreadState() {
     try {
       threadInfo.value = await getThread(props.threadId)
     } catch (_) {
-      threadInfo.value = null
+      if (!silent) {
+        threadInfo.value = null
+      }
     }
   } catch (err) {
-    error.value = err.message || 'Failed to load thread state'
+    if (!silent) {
+      error.value = err.message || 'Failed to load thread state'
+    }
     console.error('Load thread state error:', err)
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
   }
 }
 
@@ -496,6 +614,31 @@ async function onToggleDailyRunner(enabled) {
     dailyError.value = e?.message || 'Failed to save daily runner setting'
   } finally {
     dailyBusy.value = false
+  }
+}
+
+function toggleInfoPopover() {
+  infoPopoverOpen.value = !infoPopoverOpen.value
+  if (infoPopoverOpen.value) settingsPopoverOpen.value = false
+}
+
+function toggleSettingsPopover() {
+  settingsPopoverOpen.value = !settingsPopoverOpen.value
+  if (settingsPopoverOpen.value) infoPopoverOpen.value = false
+}
+
+async function onToggleRequireIntro(enabled) {
+  if (!props.threadId) return
+  introSettingError.value = ''
+
+  introSettingBusy.value = true
+  try {
+    await mergeThreadMetadata(props.threadId, { require_intro: !!enabled })
+    threadInfo.value = await getThread(props.threadId)
+  } catch (e) {
+    introSettingError.value = e?.message || 'Failed to save intro setting'
+  } finally {
+    introSettingBusy.value = false
   }
 }
 
@@ -651,6 +794,66 @@ function userKey(user, index) {
   return `i:${index}`
 }
 
+function _norm(v) {
+  return String(v ?? '').trim().toLowerCase()
+}
+
+function getUserRecords(user) {
+  const items = memoryRecords.value || []
+  const username = _norm(user?.username)
+  const tgid = user?.telegram_id != null ? String(user.telegram_id) : null
+
+  return items.filter((r) => {
+    const from = r?.from_user || {}
+    const rUsername = _norm(from?.username)
+    const rTgid = from?.telegram_id != null ? String(from.telegram_id) : null
+
+    if (username && rUsername && rUsername === username) return true
+    if (tgid && rTgid && rTgid === tgid) return true
+    return false
+  })
+}
+
+function toggleUserRecordsPopover(user, index) {
+  const key = userKey(user, index)
+  userInfoPopoverKey.value = null
+  userRecordsPopoverKey.value = (userRecordsPopoverKey.value === key) ? null : key
+}
+
+function getUserInformationEntries(user) {
+  const info = user?.information
+  if (!info || typeof info !== 'object') return []
+  return Object.entries(info).filter(([k, v]) => String(k || '').trim() !== '' && String(v ?? '').trim() !== '')
+}
+
+function toggleUserInfoPopover(user, index) {
+  const key = userKey(user, index)
+  userRecordsPopoverKey.value = null
+  userInfoPopoverKey.value = (userInfoPopoverKey.value === key) ? null : key
+}
+
+function handleGlobalPointerDown(event) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+
+  if (!target.closest('.popover-anchor')) {
+    infoPopoverOpen.value = false
+    settingsPopoverOpen.value = false
+  }
+
+  if (!target.closest('.records-user-cell')) {
+    userRecordsPopoverKey.value = null
+    userInfoPopoverKey.value = null
+  }
+}
+
+async function scrollMessagesToBottom() {
+  await nextTick()
+  const el = messagesTabRef.value
+  if (!el) return
+  el.scrollTop = el.scrollHeight
+}
+
 async function onChangeIntro(user, index, value) {
   if (!props.threadId) return
   const introCompleted = value === 'done'
@@ -698,9 +901,51 @@ function isExternalLink(link) {
 
 watch(() => props.threadId, (newId) => {
   if (newId) {
+    infoPopoverOpen.value = false
+    settingsPopoverOpen.value = false
+    userRecordsPopoverKey.value = null
+    userInfoPopoverKey.value = null
     loadThreadState()
   }
 }, { immediate: true })
+
+watch(() => props.initialTab, (tab) => {
+  const next = String(tab || '').trim()
+  if (VALID_TABS.has(next) && activeTab.value !== next) {
+    activeTab.value = next
+  }
+}, { immediate: true })
+
+watch(activeTab, (tab) => {
+  if (VALID_TABS.has(tab)) {
+    emit('tab-changed', tab)
+  }
+  if (tab === 'messages') {
+    scrollMessagesToBottom()
+  }
+})
+
+watch(() => messages.value.length, () => {
+  if (activeTab.value === 'messages') {
+    scrollMessagesToBottom()
+  }
+})
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleGlobalPointerDown)
+  detailRefreshTimer = window.setInterval(() => {
+    if (!props.threadId || document.hidden) return
+    loadThreadState({ silent: true })
+  }, AUTO_REFRESH_MS)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', handleGlobalPointerDown)
+  if (detailRefreshTimer) {
+    clearInterval(detailRefreshTimer)
+    detailRefreshTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -708,19 +953,9 @@ watch(() => props.threadId, (newId) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: white;
-}
-
-.thread-id-full {
-  word-break: break-all;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem 0.75rem 1rem;
-  flex-wrap: wrap;
+  background: #fff;
+  color: #0f172a;
+  font-family: Manrope, "IBM Plex Sans", "SF Pro Text", "Segoe UI", sans-serif;
 }
 
 .records-container {
@@ -735,7 +970,7 @@ watch(() => props.threadId, (newId) => {
 
 .records-table th,
 .records-table td {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #edf2f7;
   text-align: left;
   padding: 0.5rem 0.6rem;
   vertical-align: top;
@@ -764,7 +999,7 @@ watch(() => props.threadId, (newId) => {
 
 .highlights-table th,
 .highlights-table td {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #edf2f7;
   text-align: left;
   padding: 0.5rem 0.6rem;
   vertical-align: top;
@@ -781,67 +1016,63 @@ watch(() => props.threadId, (newId) => {
   word-break: break-word;
 }
 
-.graph-config {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .graph-label {
-  font-weight: 700;
-  color: #212529;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .graph-select {
-  border: 1px solid #ced4da;
-  background: white;
+  border: 1px solid #d0d7e2;
+  background: #fff;
   color: #212529;
-  padding: 0.35rem 0.55rem;
-  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  border-radius: 10px;
   font-weight: 600;
 }
 
 .graph-status {
-  color: #495057;
-  font-size: 0.9rem;
+  color: #64748b;
+  font-size: 0.75rem;
 }
 
 .graph-error {
-  color: #c92a2a;
-  font-size: 0.9rem;
-}
-
-.daily-config {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  color: #dc2626;
+  font-size: 0.75rem;
 }
 
 .daily-label {
-  font-weight: 700;
-  color: #212529;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #0f172a;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   user-select: none;
 }
 
+.daily-label input {
+  accent-color: #0284c7;
+}
+
 .daily-status {
-  color: #495057;
-  font-size: 0.9rem;
+  color: #64748b;
+  font-size: 0.75rem;
 }
 
 .daily-error {
-  color: #c92a2a;
-  font-size: 0.9rem;
+  color: #dc2626;
+  font-size: 0.75rem;
 }
 
 .import-btn {
-  border: 1px solid #ced4da;
-  background: white;
+  border: 1px solid #d0d7e2;
+  background: #fff;
   color: #212529;
-  padding: 0.4rem 0.7rem;
-  border-radius: 6px;
+  padding: 0.45rem 0.72rem;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
 }
@@ -851,11 +1082,11 @@ watch(() => props.threadId, (newId) => {
 }
 
 .delete-btn {
-  border: 1px solid #fa5252;
-  background: #fff5f5;
-  color: #c92a2a;
-  padding: 0.4rem 0.7rem;
-  border-radius: 6px;
+  border: 1px solid #fecaca;
+  background: #fff7f7;
+  color: #b91c1c;
+  padding: 0.45rem 0.72rem;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 700;
 }
@@ -869,6 +1100,12 @@ watch(() => props.threadId, (newId) => {
   cursor: not-allowed;
 }
 
+.import-status-line {
+  color: #2b8a3e;
+  font-size: 0.9rem;
+  padding: 0.4rem 1.5rem 0.8rem 1.5rem;
+}
+
 .import-status {
   color: #2b8a3e;
   font-size: 0.9rem;
@@ -876,7 +1113,7 @@ watch(() => props.threadId, (newId) => {
 
 .import-panel {
   padding: 0 1rem 1rem 1rem;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid #edf2f7;
   background: #ffffff;
 }
 
@@ -908,8 +1145,8 @@ watch(() => props.threadId, (newId) => {
 .import-textarea {
   width: 100%;
   resize: vertical;
-  border: 1px solid #ced4da;
-  border-radius: 8px;
+  border: 1px solid #d0d7e2;
+  border-radius: 12px;
   padding: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 0.9rem;
@@ -918,8 +1155,8 @@ watch(() => props.threadId, (newId) => {
 }
 
 .import-textarea:focus {
-  border-color: #748ffc;
-  box-shadow: 0 0 0 3px rgba(116, 143, 252, 0.18);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
 }
 
 .import-actions {
@@ -931,11 +1168,11 @@ watch(() => props.threadId, (newId) => {
 }
 
 .import-apply {
-  border: 1px solid #4263eb;
-  background: #4263eb;
+  border: 1px solid #0284c7;
+  background: #0284c7;
   color: white;
-  padding: 0.45rem 0.8rem;
-  border-radius: 8px;
+  padding: 0.48rem 0.84rem;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 700;
 }
@@ -946,11 +1183,11 @@ watch(() => props.threadId, (newId) => {
 }
 
 .import-clear {
-  border: 1px solid #ced4da;
-  background: white;
+  border: 1px solid #d0d7e2;
+  background: #fff;
   color: #212529;
-  padding: 0.45rem 0.8rem;
-  border-radius: 8px;
+  padding: 0.48rem 0.84rem;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
 }
@@ -1005,24 +1242,30 @@ watch(() => props.threadId, (newId) => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Thread Header */
 .thread-header {
   padding: 1rem 1.5rem;
-  background: #f8f9fa;
-  border-bottom: 1px solid #dee2e6;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  position: relative;
+  z-index: 40;
 }
 
 .thread-header-top {
-  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0;
 }
 
 .thread-title {
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   font-weight: 700;
-  color: #212529;
+  color: #0f172a;
   margin: 0;
   display: flex;
   align-items: center;
@@ -1030,106 +1273,195 @@ watch(() => props.threadId, (newId) => {
   flex-wrap: wrap;
 }
 
-.chat-id-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-family: monospace;
-  background: #e7f5ff;
-  color: #1971c2;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+.header-popovers {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.thread-header-meta {
+.popover-anchor {
+  position: relative;
+  z-index: 45;
+}
+
+.header-btn {
+  border: 1px solid #d0d7e2;
+  background: #fff;
+  color: #0f172a;
+  padding: 0.42rem 0.74rem;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.header-btn:hover {
+  background: #f1f3f5;
+}
+
+.popover-card {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  min-width: 320px;
+  max-width: 420px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
+  padding: 0.8rem;
+  z-index: 60;
+}
+
+.settings-card {
+  min-width: 360px;
+}
+
+.popover-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.popover-row {
   display: flex;
-  gap: 2rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+  border-bottom: 1px dashed #edf0f2;
+  padding: 0.42rem 0;
+}
+
+.popover-row:last-child {
+  border-bottom: none;
+}
+
+.popover-label {
+  font-size: 0.8rem;
+  color: #6c757d;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.popover-value {
+  font-size: 0.84rem;
+  color: #212529;
+  text-align: right;
+  word-break: break-word;
+}
+
+.popover-value.code {
+  font-family: monospace;
+  background: #f8f9fa;
+  border-radius: 4px;
+  padding: 0.12rem 0.38rem;
+}
+
+.settings-group {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.settings-group-full {
+  grid-column: 1 / -1;
+}
+
+.settings-buttons {
+  margin-top: 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid #edf2f7;
+  display: flex;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.info-item label {
-  font-size: 0.75rem;
-  color: #6c757d;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.info-item code {
-  padding: 0.25rem 0.5rem;
-  background: white;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  font-family: monospace;
-}
-
-.info-item span {
-  font-size: 0.875rem;
-  color: #212529;
+.settings-buttons .import-btn,
+.settings-buttons .delete-btn {
+  flex: 1 1 0;
+  font-weight: 500;
 }
 
 /* Tabs */
 .tabs {
   display: flex;
-  border-bottom: 2px solid #dee2e6;
-  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 0 1.25rem;
+  position: relative;
+  z-index: 2;
 }
 
 .tab {
-  padding: 1rem 1.5rem;
+  padding: 0.9rem 1.2rem;
   background: none;
   border: none;
-  border-bottom: 3px solid transparent;
+  border-bottom: 2px solid transparent;
   cursor: pointer;
-  font-size: 0.9375rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #6c757d;
   transition: all 0.2s;
 }
 
 .tab:hover {
-  color: #007bff;
-  background: #f8f9fa;
+  color: #0284c7;
+  background: #f8fafc;
 }
 
 .tab.active {
-  color: #007bff;
-  border-bottom-color: #007bff;
+  color: #0284c7;
+  border-bottom-color: #0284c7;
 }
 
 /* Tab Content */
 .tab-content {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 1.25rem;
+  position: relative;
+  z-index: 1;
 }
 
 .no-data {
-  padding: 3rem;
+  padding: 2.5rem;
   text-align: center;
   color: #6c757d;
-  background: #f8f9fa;
-  border-radius: 6px;
-  font-size: 1rem;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  font-size: 0.95rem;
 }
 
 /* Users Table */
 .users-table-container {
   overflow-x: auto;
+  overflow-y: visible;
+  position: relative;
 }
 
 .users-table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.86rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: visible;
 }
 
 .users-table thead {
-  background: #f8f9fa;
+  background: #f8fafc;
   position: sticky;
   top: 0;
   z-index: 1;
@@ -1139,15 +1471,21 @@ watch(() => props.threadId, (newId) => {
   padding: 0.75rem 1rem;
   text-align: left;
   font-weight: 600;
-  color: #495057;
-  border-bottom: 2px solid #dee2e6;
-  font-size: 0.8125rem;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.76rem;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.users-table th.intro-header {
+  text-align: right;
+  padding-right: 0.92rem;
 }
 
 .users-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e9ecef;
+  padding: 0.72rem 0.92rem;
+  border-bottom: 1px solid #edf2f7;
   vertical-align: top;
 }
 
@@ -1156,57 +1494,68 @@ watch(() => props.threadId, (newId) => {
 }
 
 .users-table tbody tr:hover {
-  background: #f8f9fa;
+  background: #f8fafc;
 }
 
-.users-table tbody tr.intro-completed {
-  background: #f0fff4;
+.users-table tbody tr:nth-child(odd) {
+  background: #fff;
 }
 
-.users-table tbody tr:not(.intro-completed) {
-  background: #fff5f5;
+.users-table tbody tr:nth-child(even) {
+  background: #f8fafc;
 }
 
-.status-cell {
-  width: 120px;
-}
-
-.edit-cell {
-  width: 180px;
+.intro-status-cell {
+  min-width: 180px;
   white-space: nowrap;
+  text-align: right;
+  position: relative;
+}
+
+.intro-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
 }
 
 .intro-select {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  background: white;
-  font-size: 0.875rem;
+  padding: 0.28rem 0.42rem;
+  border: 1px solid #d0d7e2;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.74rem;
+  width: auto;
+  min-width: 92px;
+  margin-left: 0.25rem;
 }
 
 .saving {
-  margin-left: 0.5rem;
-  font-size: 0.75rem;
+  margin-left: 0.45rem;
+  font-size: 0.7rem;
   color: #6c757d;
 }
 
 .status-badge {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.2rem 0.62rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .status-badge.completed {
-  background: #d4edda;
-  color: #155724;
+  background: #dcfce7;
+  color: #166534;
 }
 
 .status-badge:not(.completed) {
-  background: #f8d7da;
-  color: #721c24;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .name-cell {
@@ -1228,21 +1577,115 @@ watch(() => props.threadId, (newId) => {
   font-size: 0.8125rem;
 }
 
-.telegram-cell .na,
-.preferred-cell .na,
-.info-cell .na {
+.telegram-cell .na {
   color: #adb5bd;
   font-style: italic;
 }
 
-.info-json {
-  padding: 0.5rem;
-  background: #f8f9fa;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  margin: 0;
-  max-width: 300px;
-  overflow-x: auto;
+.records-user-cell {
+  min-width: 130px;
+  position: relative;
+}
+
+.records-user-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.records-count {
+  font-size: 0.78rem;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 0.1rem 0.42rem;
+  min-width: 1.6rem;
+  text-align: center;
+}
+
+.records-popover-btn {
+  border: 1px solid #d0d7e2;
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.16rem 0.34rem;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.records-popover-btn:hover {
+  background: #f1f5f9;
+}
+
+.user-records-popover {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  width: 320px;
+  max-height: 280px;
+  overflow: auto;
+  z-index: 12;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.15);
+  padding: 0.55rem;
+}
+
+.records-user-cell {
+  z-index: 2;
+}
+
+.user-records-title {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.4rem;
+}
+
+.user-records-empty {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.user-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.user-record-item {
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 0.42rem 0.5rem;
+}
+
+.user-record-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-bottom: 0.22rem;
+}
+
+.user-record-meta code {
+  font-size: 0.7rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.06rem 0.3rem;
+}
+
+.user-record-text {
+  font-size: 0.8rem;
+  color: #1e293b;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Messages */
@@ -1253,8 +1696,8 @@ watch(() => props.threadId, (newId) => {
 }
 
 .message {
-  padding: 0.75rem;
-  border-radius: 6px;
+  padding: 0.8rem;
+  border-radius: 10px;
   border-left: 4px solid;
 }
 

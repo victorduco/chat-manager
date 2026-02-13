@@ -1,32 +1,8 @@
 <template>
   <div class="threads-list">
-    <div class="filters">
-      <h3>Filters</h3>
-      <div class="filter-group">
-        <label>Status:</label>
-        <select v-model="filters.status" @change="loadThreads">
-          <option value="">All</option>
-          <option value="idle">Idle</option>
-          <option value="busy">Busy</option>
-          <option value="interrupted">Interrupted</option>
-          <option value="error">Error</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Limit:</label>
-        <input
-          type="number"
-          v-model.number="filters.limit"
-          @change="loadThreads"
-          min="1"
-          max="500"
-        />
-      </div>
-      <button @click="loadThreads" class="refresh-btn">🔄 Refresh</button>
-    </div>
-
     <div class="stats">
       <span>Total threads: {{ threads.length }}</span>
+      <button @click="loadThreads" class="refresh-btn">🔄 Refresh</button>
       <span v-if="loading">Loading...</span>
       <span v-if="error" class="error">{{ error }}</span>
     </div>
@@ -36,29 +12,32 @@
         v-for="thread in threads"
         :key="thread.thread_id"
         class="thread-card"
-        :class="{ active: selectedThreadId === thread.thread_id }"
+        :class="{ active: selectedThreadIdLocal === thread.thread_id }"
         @click="selectThread(thread.thread_id)"
       >
         <div class="thread-header">
-          <span class="thread-id">{{ truncateId(thread.thread_id) }}</span>
+          <span class="thread-title">{{ displayName(thread.thread_id) }}</span>
           <span class="thread-status" :class="thread.status">
             {{ thread.status || 'unknown' }}
           </span>
         </div>
         <div class="thread-meta">
-          <div v-if="thread.created_at" class="meta-item">
-            Created: {{ formatDate(thread.created_at) }}
-          </div>
           <div v-if="thread.updated_at" class="meta-item">
             Updated: {{ formatDate(thread.updated_at) }}
           </div>
         </div>
         <div class="thread-counts">
           <span class="count-chip">
-            💬 {{ (extra(thread.thread_id) && extra(thread.thread_id).messages != null) ? extra(thread.thread_id).messages : '—' }}
+            👥 Users: {{ countValue(thread.thread_id, 'users') }}
           </span>
           <span class="count-chip">
-            👥 {{ (extra(thread.thread_id) && extra(thread.thread_id).users != null) ? extra(thread.thread_id).users : '—' }}
+            💬 Messages: {{ countValue(thread.thread_id, 'messages') }}
+          </span>
+          <span class="count-chip">
+            🧠 Records: {{ countValue(thread.thread_id, 'records') }}
+          </span>
+          <span class="count-chip">
+            ⭐ Highlights: {{ countValue(thread.thread_id, 'highlights') }}
           </span>
         </div>
       </div>
@@ -71,47 +50,64 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { searchThreads, getThread } from '../services/api'
+
+const props = defineProps({
+  selectedThreadId: {
+    type: String,
+    default: null
+  }
+})
 
 const emit = defineEmits(['thread-selected'])
 
 const threads = ref([])
-const selectedThreadId = ref(null)
+const selectedThreadIdLocal = ref(null)
 const loading = ref(false)
 const error = ref(null)
 const extrasById = ref({})
+const LIMIT = 100
+const AUTO_REFRESH_MS = 5000
+let refreshTimer = null
 
 function extra(threadId) {
   return extrasById.value[threadId] || null
 }
 
-const filters = ref({
-  status: '',
-  limit: 100
-})
+function displayName(threadId) {
+  const x = extra(threadId)
+  if (x?.chat_title) return String(x.chat_title)
+  if (x?.chat_id) return `Chat ${x.chat_id}`
+  return truncateId(threadId)
+}
 
-async function loadThreads() {
-  loading.value = true
-  error.value = null
+function countValue(threadId, key) {
+  const x = extra(threadId)
+  if (!x || x[key] == null) return '—'
+  return x[key]
+}
+
+async function loadThreads({ silent = false } = {}) {
+  if (!silent) {
+    loading.value = true
+    error.value = null
+  }
 
   try {
-    const params = {
-      limit: filters.value.limit
-    }
-    if (filters.value.status) {
-      params.status = filters.value.status
-    }
-
-    const base = await searchThreads(params)
+    const base = await searchThreads({ limit: LIMIT })
     threads.value = base
     // Best-effort enrichment: show message/user counts without blocking the list.
     enrichThreads(base)
   } catch (err) {
-    error.value = err.message || 'Failed to load threads'
+    if (!silent) {
+      error.value = err.message || 'Failed to load threads'
+    }
     console.error('Load threads error:', err)
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
   }
 }
 
@@ -146,12 +142,22 @@ async function enrichThreads(list) {
     try {
       const t = await getThread(id)
       const values = (t && t.values) || {}
+      const metadata = (t && t.metadata && typeof t.metadata === 'object') ? t.metadata : {}
       const messages = Array.isArray(values.messages) ? values.messages.length : null
       const users = Array.isArray(values.users) ? values.users.length : null
+      const records = Array.isArray(values.memory_records) ? values.memory_records.length : null
+      const highlights = Array.isArray(values.highlights) ? values.highlights.length : null
 
       extrasById.value = {
         ...extrasById.value,
-        [id]: { messages, users }
+        [id]: {
+          messages,
+          users,
+          records,
+          highlights,
+          chat_title: metadata.chat_title || null,
+          chat_id: metadata.chat_id || null,
+        }
       }
     } catch (_) {
       // Ignore enrichment errors.
@@ -160,7 +166,7 @@ async function enrichThreads(list) {
 }
 
 function selectThread(threadId) {
-  selectedThreadId.value = threadId
+  selectedThreadIdLocal.value = threadId
   emit('thread-selected', threadId)
 }
 
@@ -181,7 +187,23 @@ function formatDate(dateString) {
 }
 
 onMounted(() => {
+  selectedThreadIdLocal.value = props.selectedThreadId || null
   loadThreads()
+  refreshTimer = window.setInterval(() => {
+    if (document.hidden) return
+    loadThreads({ silent: true })
+  }, AUTO_REFRESH_MS)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+})
+
+watch(() => props.selectedThreadId, (v) => {
+  selectedThreadIdLocal.value = v || null
 })
 
 defineExpose({ loadThreads })
@@ -192,64 +214,36 @@ defineExpose({ loadThreads })
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f8f9fa;
-  border-right: 1px solid #dee2e6;
-}
-
-.filters {
-  padding: 1rem;
-  background: white;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.filters h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1rem;
-  color: #495057;
-}
-
-.filter-group {
-  margin-bottom: 0.75rem;
-}
-
-.filter-group label {
-  display: block;
-  margin-bottom: 0.25rem;
-  font-size: 0.875rem;
-  color: #6c757d;
-}
-
-.filter-group select,
-.filter-group input {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  font-family: Manrope, "IBM Plex Sans", "SF Pro Text", "Segoe UI", sans-serif;
 }
 
 .refresh-btn {
-  width: 100%;
-  padding: 0.5rem;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  padding: 0.4rem 0.66rem;
+  background: #0284c7;
+  color: #fff;
+  border: 1px solid #0284c7;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.76rem;
+  font-weight: 600;
 }
 
 .refresh-btn:hover {
-  background: #0056b3;
+  background: #0369a1;
 }
 
 .stats {
   padding: 0.75rem 1rem;
-  background: #e9ecef;
-  font-size: 0.875rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.82rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .stats .error {
@@ -259,27 +253,27 @@ defineExpose({ loadThreads })
 .threads-container {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem;
+  padding: 0.6rem;
 }
 
 .thread-card {
-  background: white;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.72rem;
+  margin-bottom: 0.55rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.18s;
 }
 
 .thread-card:hover {
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  border-color: #007bff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  border-color: #7dd3fc;
 }
 
 .thread-card.active {
-  border-color: #007bff;
-  background: #e7f3ff;
+  border-color: #38bdf8;
+  background: #f0f9ff;
 }
 
 .thread-header {
@@ -289,19 +283,23 @@ defineExpose({ loadThreads })
   margin-bottom: 0.5rem;
 }
 
-.thread-id {
-  font-family: monospace;
-  font-size: 0.875rem;
-  color: #495057;
+.thread-title {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  color: #0f172a;
   font-weight: 600;
 }
 
 .thread-status {
-  padding: 0.125rem 0.5rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
+  padding: 0.14rem 0.52rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
   text-transform: uppercase;
   font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .thread-status.idle {
@@ -331,32 +329,33 @@ defineExpose({ loadThreads })
 }
 
 .meta-item {
-  font-size: 0.75rem;
-  color: #6c757d;
+  font-size: 0.72rem;
+  color: #64748b;
 }
 
 .thread-counts {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .count-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.75rem;
-  color: #495057;
-  background: #f1f3f5;
-  border: 1px solid #e9ecef;
-  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 0.18rem 0.52rem;
   border-radius: 999px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .empty-state {
   text-align: center;
-  padding: 2rem;
-  color: #6c757d;
+  padding: 2rem 1rem;
+  color: #64748b;
 }
 </style>

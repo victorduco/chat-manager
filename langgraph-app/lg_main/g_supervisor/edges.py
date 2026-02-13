@@ -3,7 +3,26 @@ from conversation_states.states import InternalState
 from langchain_openai import ChatOpenAI
 
 
+def _is_intro_required(state: InternalState) -> bool:
+    """Thread-level toggle. Defaults to True when metadata is missing."""
+    kwargs = getattr(getattr(state, "last_external_message", None), "additional_kwargs", {}) or {}
+    raw = kwargs.get("require_intro")
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return True
+    v = str(raw).strip().lower()
+    if v in {"false", "0", "no", "off"}:
+        return False
+    if v in {"true", "1", "yes", "on"}:
+        return True
+    return True
+
+
 def route_after_intro_checker(state: InternalState) -> Literal["intro_quality_guard", "no_intro", "mention_checker"]:
+    if not _is_intro_required(state):
+        return "mention_checker"
+
     if bool(getattr(state, "intro_hashtag_detected", False)):
         return "intro_quality_guard"
 
