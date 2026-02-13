@@ -432,6 +432,18 @@ def node5_generate_voice(state: DailyRunnerState, writer=None) -> dict:
         return {}
 
     try:
+        # Local/ops-configurable probability gate for voice generation.
+        # If skipped, do not generate voice text and do not call TTS API.
+        try:
+            prob = float(os.getenv("DAILY_RUNNER_VOICE_PROBABILITY", "1.0"))
+        except Exception:
+            prob = 1.0
+        prob = max(0.0, min(1.0, prob))
+        roll = random.random()
+        if roll >= prob:
+            log.info("node5 voice skipped by probability gate roll=%.4f prob=%.4f", roll, prob)
+            return {}
+
         voice_prompt = (
             "На основе дайджеста ниже напиши одну короткую вдохновляющую и поддерживающую фразу для участников сообщества.\n"
             "Требования:\n"
@@ -455,7 +467,7 @@ def node5_generate_voice(state: DailyRunnerState, writer=None) -> dict:
 
         tts_model = os.getenv("OPENAI_TTS_MODEL", "tts-1")
         tts_voice = os.getenv("OPENAI_TTS_VOICE", "Ash").strip().lower()
-        log.info("node5 voice_text=%r model=%s voice=%s", voice_text[:300], tts_model, tts_voice)
+        log.info("node5 voice_text=%r model=%s voice=%s prob=%.4f roll=%.4f", voice_text[:300], tts_model, tts_voice, prob, roll)
         speech = image_client.audio.speech.create(
             model=tts_model,
             voice=tts_voice,
