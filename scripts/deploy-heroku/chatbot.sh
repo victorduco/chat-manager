@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy chatbot to Heroku
-# Usage: ./scripts/deploy/chatbot.sh
+# Usage: ./scripts/deploy-heroku/chatbot.sh
 
 set -euo pipefail
 
@@ -37,18 +37,9 @@ if ! heroku apps:info -a "$HEROKU_APP_NAME" &> /dev/null; then
     exit 1
 fi
 
-# Check if git remote exists, if not add it
-if ! git remote get-url heroku-chatbot &> /dev/null 2>&1; then
-    echo "📌 Adding Heroku git remote..."
-    git remote add heroku-chatbot "https://git.heroku.com/$HEROKU_APP_NAME.git"
-else
-    # Update the remote URL in case the app name changed
-    git remote set-url heroku-chatbot "https://git.heroku.com/$HEROKU_APP_NAME.git"
-fi
-
 # Deploy using git subtree (only chatbot directory)
 echo "📤 Pushing chatbot to Heroku..."
-git push heroku-chatbot "$(git subtree split --prefix chatbot HEAD):main" --force
+git push "https://git.heroku.com/$HEROKU_APP_NAME.git" "$(git subtree split --prefix chatbot HEAD):main" --force
 
 echo "✅ Chatbot deployed successfully!"
 echo "🔗 URL: https://$HEROKU_APP_NAME.herokuapp.com"

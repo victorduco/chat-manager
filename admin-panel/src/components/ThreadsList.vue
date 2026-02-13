@@ -96,9 +96,14 @@ async function loadThreads({ silent = false } = {}) {
 
   try {
     const base = await searchThreads({ limit: LIMIT })
-    threads.value = base
+    const sorted = (Array.isArray(base) ? base.slice() : []).sort((a, b) => {
+      const ta = Date.parse(a?.updated_at || a?.created_at || '') || 0
+      const tb = Date.parse(b?.updated_at || b?.created_at || '') || 0
+      return tb - ta
+    })
+    threads.value = sorted
     // Best-effort enrichment: show message/user counts without blocking the list.
-    enrichThreads(base)
+    enrichThreads(sorted)
   } catch (err) {
     if (!silent) {
       error.value = err.message || 'Failed to load threads'

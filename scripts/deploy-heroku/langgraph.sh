@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy LangGraph app to Heroku using LangGraph CLI
-# Usage: ./scripts/deploy/langgraph.sh
+# Usage: ./scripts/deploy-heroku/langgraph.sh
 
 set -euo pipefail
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Main deployment script for Agent Task Manager
-# Usage: ./scripts/deploy/deploy.sh [chatbot|langgraph|all]
+# Usage: ./scripts/deploy-heroku/deploy.sh [chatbot|langgraph|all]
 
 set -euo pipefail
 
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 function show_usage() {
     cat << EOF
-Usage: ./scripts/deploy/deploy.sh [COMPONENT]
+Usage: ./scripts/deploy-heroku/deploy.sh [COMPONENT]
 
 Deploy Agent Task Manager components to Heroku
 
@@ -22,10 +22,10 @@ Environment variables:
     HEROKU_APP_NAME   Heroku app name for langgraph (default: langgraph-server)
 
 Examples:
-    ./scripts/deploy/deploy.sh chatbot
-    ./scripts/deploy/deploy.sh langgraph
-    ./scripts/deploy/deploy.sh all
-    HEROKU_BOT_NAME=my-bot ./scripts/deploy/deploy.sh chatbot
+    ./scripts/deploy-heroku/deploy.sh chatbot
+    ./scripts/deploy-heroku/deploy.sh langgraph
+    ./scripts/deploy-heroku/deploy.sh all
+    HEROKU_BOT_NAME=my-bot ./scripts/deploy-heroku/deploy.sh chatbot
 
 EOF
 }

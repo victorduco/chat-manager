@@ -206,3 +206,11 @@ logs/
 langgraph-app/-
 test_data/result.json
 test_data/
+out_intro_*/
+
+# Monorepo frontend/common local artifacts
+node_modules/
+.DS_Store
+*.local
+.idea/
+.vscode/
