@@ -13,6 +13,7 @@ class Human(BaseModel):
     intro_locked: bool = False
     telegram_id: Optional[int] = None  # Telegram user ID for permissions
     messages_without_intro: int = 0  # Count messages sent without intro
+    intro_message: Optional[str] = None  # Link to Telegram intro message (e.g., t.me link)
 
     def update_info(self, updates: dict[str, str] | list[dict[str, str]]) -> None:
         if isinstance(updates, dict):

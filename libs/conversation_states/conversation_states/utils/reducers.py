@@ -39,6 +39,9 @@ def add_user(left: list["Human"], right: list["Human"]) -> list["Human"]:
             lu.preferred_name = ru.preferred_name
         if getattr(ru, "telegram_id", None) is not None:
             lu.telegram_id = ru.telegram_id
+        if getattr(ru, "intro_message", None) is not None:
+            ru_intro_message = str(ru.intro_message).strip()
+            lu.intro_message = ru_intro_message or None
 
         # Preserve admin-set intro status across merges.
         # Most "normal" user updates don't know intro status and would default to False,

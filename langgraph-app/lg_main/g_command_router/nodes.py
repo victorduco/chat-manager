@@ -169,6 +169,7 @@ def upsert_users(state: ExternalState, writer: StreamWriter) -> ExternalState:
             "information": raw.get("information") if isinstance(raw.get("information"), dict) else {},
             "intro_completed": bool(raw.get("intro_completed", False)),
             "telegram_id": raw.get("telegram_id", None),
+            "intro_message": raw.get("intro_message", None),
         }
 
         try:
@@ -197,6 +198,9 @@ def upsert_users(state: ExternalState, writer: StreamWriter) -> ExternalState:
             prev.telegram_id = hu.telegram_id
             prev.intro_completed = bool(hu.intro_completed)
             prev.intro_locked = True
+            if raw.get("intro_message", None) is not None:
+                normalized_intro = str(raw.get("intro_message", "")).strip()
+                prev.intro_message = normalized_intro or None
             try:
                 if hu.information:
                     prev.information.update(hu.information)
