@@ -5,9 +5,10 @@ from pydantic.type_adapter import TypeAdapter
 from langchain_core.messages import BaseMessage, RemoveMessage, AnyMessage, AIMessage
 from langgraph.graph import add_messages
 from .humans import Human
+from .highlights import Highlight
 from .memory import MemoryRecord
 from .messages import MessageAPI, count_tokens
-from .utils.reducers import add_user, add_memory_records, manage_state
+from .utils.reducers import add_user, add_memory_records, add_highlights, manage_state
 
 
 class InternalState(BaseModel):
@@ -20,9 +21,21 @@ class InternalState(BaseModel):
     last_sender: Human
     summary: str = ""
     memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
+    highlights: Annotated[list[Highlight], add_highlights] = Field(default_factory=list)
     # Ephemeral routing helper (not persisted to checkpoints).
     chat_manager_decision: Optional[dict] = Field(default=None, exclude=True)
-    bot_mentioned: bool = Field(default=False, exclude=True)
+    # Ephemeral trigger for supervisor routing (mention, link, etc.).
+    chat_manager_triggered: bool = Field(default=False, exclude=True)
+    # Ephemeral result from script-only mention checker.
+    strict_mention_detected: bool = Field(default=False, exclude=True)
+    # Ephemeral flag: run non-mentioned relevance LLM guard or skip directly.
+    run_unmentioned_relevance_guard: bool = Field(default=False, exclude=True)
+    # Ephemeral flag/data for mentioned guard blocked response.
+    mentioned_guard_blocked: bool = Field(default=False, exclude=True)
+    mentioned_guard_emoji: str = Field(default="", exclude=True)
+    # Ephemeral flags for #intro quality validation flow.
+    intro_hashtag_detected: bool = Field(default=False, exclude=True)
+    intro_quality_passed: bool = Field(default=False, exclude=True)
     chat_manager_categories: list[str] = Field(default_factory=list, exclude=True)
 
     @property
@@ -46,6 +59,7 @@ class InternalState(BaseModel):
             last_external_message=last_message,
             last_sender=sender,
             memory_records=list(external.memory_records or []),
+            highlights=list(external.highlights or []),
         )
 
     @model_validator(mode="before")
@@ -62,6 +76,11 @@ class InternalState(BaseModel):
                 r if isinstance(r, MemoryRecord) else MemoryRecord(**r)
                 for r in values["memory_records"]
             ]
+        if "highlights" in values and values["highlights"] is not None:
+            values["highlights"] = [
+                h if isinstance(h, Highlight) else Highlight(**h)
+                for h in values["highlights"]
+            ]
         return values
 
 
@@ -74,6 +93,7 @@ class ExternalState(BaseModel):
     last_reasoning: Annotated[Optional[list[AnyMessage]],
                               manage_state] = Field(default=None)
     memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
+    highlights: Annotated[list[Highlight], add_highlights] = Field(default_factory=list)
     # Ephemeral routing helper for graph_dispatcher (not persisted to checkpoints).
     dispatch_target: Optional[str] = Field(default=None, exclude=True)
 
@@ -93,6 +113,7 @@ class ExternalState(BaseModel):
             summary=internal.summary,
             last_reasoning=internal.reasoning_messages,
             memory_records=list(getattr(internal, "memory_records", []) or []),
+            highlights=list(getattr(internal, "highlights", []) or []),
         )
 
     @model_validator(mode="before")
@@ -108,6 +129,11 @@ class ExternalState(BaseModel):
                 r if isinstance(r, MemoryRecord) else MemoryRecord(**r)
                 for r in values["memory_records"]
             ]
+        if "highlights" in values and values["highlights"] is not None:
+            values["highlights"] = [
+                h if isinstance(h, Highlight) else Highlight(**h)
+                for h in values["highlights"]
+            ]
         return values
 
     def clear_state(self):
@@ -118,6 +144,7 @@ class ExternalState(BaseModel):
         self.users = []
         self.last_reasoning = []
         self.memory_records = []
+        self.highlights = []
         return
 
     def summarize_overall_state(self) -> str:

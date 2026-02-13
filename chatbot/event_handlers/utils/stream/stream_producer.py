@@ -174,6 +174,21 @@ class StreamProducer():
         if node in ["__start__", "__end__"]:
             return False
 
+        # Do not stream intermediate control/guard LLM outputs to Telegram users.
+        # These nodes are internal classifiers and can emit raw JSON.
+        blocked_nodes = {
+            "prepare_internal",
+            "prepare_external",
+            "intro_checker",
+            "intro_quality_guard",
+            "mention_checker",
+            "strict_mention_checker",
+            "mentioned_quality_guard",
+            "unmentioned_relevance_guard",
+        }
+        if node in blocked_nodes:
+            return False
+
         queue_chunk = MessageContent(
             message_id=message_id, chunk=content)
         return queue_chunk

@@ -3,11 +3,9 @@ from conversation_states.states import InternalState
 from langchain_openai import ChatOpenAI
 
 
-def route_after_intro_checker(state: InternalState) -> Literal["intro_responder", "no_intro", "mention_checker"]:
-    current_message_content = getattr(state.last_external_message, "content", "")
-    has_intro_now = isinstance(current_message_content, str) and "#intro" in current_message_content.lower()
-    if has_intro_now:
-        return "intro_responder"
+def route_after_intro_checker(state: InternalState) -> Literal["intro_quality_guard", "no_intro", "mention_checker"]:
+    if bool(getattr(state, "intro_hashtag_detected", False)):
+        return "intro_quality_guard"
 
     sender = getattr(state, "last_sender", None)
     intro_completed = bool(getattr(sender, "intro_completed", False)) if sender else False
@@ -18,8 +16,33 @@ def route_after_intro_checker(state: InternalState) -> Literal["intro_responder"
     return "mention_checker"
 
 
-def route_after_mention_checker(state: InternalState) -> Literal["chat_manager", "prepare_external"]:
-    return "chat_manager" if bool(getattr(state, "bot_mentioned", False)) else "prepare_external"
+def route_after_intro_quality_guard(state: InternalState) -> Literal["intro_responder", "intro_quality_reprompt"]:
+    if bool(getattr(state, "intro_quality_passed", False)):
+        return "intro_responder"
+    return "intro_quality_reprompt"
+
+
+def route_after_mention_checker(state: InternalState) -> Literal["mentioned_quality_guard", "unmentioned_relevance_guard", "prepare_external"]:
+    if bool(getattr(state, "strict_mention_detected", False)):
+        return "mentioned_quality_guard"
+    if bool(getattr(state, "run_unmentioned_relevance_guard", False)):
+        return "unmentioned_relevance_guard"
+    return "prepare_external"
+
+
+def route_after_mentioned_quality_guard(state: InternalState) -> Literal["chat_manager", "mentioned_block_response", "prepare_external"]:
+    if bool(getattr(state, "mentioned_guard_blocked", False)):
+        return "mentioned_block_response"
+    triggered = bool(getattr(state, "chat_manager_triggered", False))
+    return "chat_manager" if triggered else "prepare_external"
+
+
+def route_after_unmentioned_relevance_guard(state: InternalState) -> Literal["chat_manager", "prepare_external"]:
+    triggered = bool(getattr(state, "chat_manager_triggered", False))
+    # Backward compatibility for old checkpoints/field name.
+    if not triggered:
+        triggered = bool(getattr(state, "bot_mentioned", False))
+    return "chat_manager" if triggered else "prepare_external"
 
 
 def should_use_profile_tools(state: InternalState) -> Literal["profile_tools", "prepare_external"]:

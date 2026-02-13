@@ -1,5 +1,6 @@
 from typing import Optional, Union, Any
 from conversation_states.humans import Human
+from conversation_states.highlights import Highlight
 from conversation_states.memory import MemoryRecord
 
 
@@ -87,6 +88,40 @@ def add_memory_records(left: list["MemoryRecord"], right: list["MemoryRecord"]) 
         else:
             left.append(rr)
             by_id[rid] = rr
+    return left
+
+
+def add_highlights(left: list["Highlight"], right: list["Highlight"]) -> list["Highlight"]:
+    right = [h if isinstance(h, Highlight) else Highlight(**h) for h in right or []]
+
+    by_id = {getattr(h, "id", None): h for h in left or [] if getattr(h, "id", None)}
+    by_link = {
+        str(getattr(h, "highlight_link", "")).strip(): h
+        for h in left or []
+        if isinstance(getattr(h, "highlight_link", None), str) and str(getattr(h, "highlight_link", "")).strip()
+    }
+
+    for rh in right:
+        rh_link = str(rh.highlight_link or "").strip()
+        target = by_id.get(rh.id) or (by_link.get(rh_link) if rh_link else None)
+        if target is None:
+            left.append(rh)
+            by_id[rh.id] = rh
+            if rh_link:
+                by_link[rh_link] = rh
+            continue
+
+        target.category = rh.category
+        target.tags = list(rh.tags or [])
+        target.highlight_link = rh.highlight_link
+        target.highlight_description = rh.highlight_description
+        target.message_text = rh.message_text
+        target.author_username = rh.author_username
+        target.author_telegram_id = rh.author_telegram_id
+        target.published_at = rh.published_at
+        target.expires_at = rh.expires_at
+        target.deleted_at = rh.deleted_at
+
     return left
 
 

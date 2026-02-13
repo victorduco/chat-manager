@@ -33,11 +33,22 @@ class ContextExtractor(BaseModel):
         tg_date = getattr(tg_message, "date", None)
         if isinstance(tg_date, datetime) and tg_date.tzinfo is None:
             tg_date = tg_date.replace(tzinfo=timezone.utc)
+        reply_to_message = getattr(tg_message, "reply_to_message", None)
+        reply_to_message_id = getattr(reply_to_message, "message_id", None)
+        reply_to_user = getattr(reply_to_message, "from_user", None)
+        reply_to_username = getattr(reply_to_user, "username", None) if reply_to_user else None
+        reply_to_user_id = getattr(reply_to_user, "id", None) if reply_to_user else None
+        reply_to_text = getattr(reply_to_message, "text", None)
 
         msg_link = cls._build_tg_message_link(
             chat_id=chat_id,
             chat_username=chat_username,
             message_id=message_id,
+        )
+        reply_link = cls._build_tg_message_link(
+            chat_id=chat_id,
+            chat_username=chat_username,
+            message_id=reply_to_message_id,
         )
         ctx_class = cls(
             chat_id=chat_id,
@@ -54,6 +65,11 @@ class ContextExtractor(BaseModel):
                     "tg_message_id": message_id,
                     "tg_date": tg_date.isoformat() if isinstance(tg_date, datetime) else None,
                     "tg_link": msg_link,
+                    "tg_reply_to_message_id": reply_to_message_id,
+                    "tg_reply_to_link": reply_link,
+                    "tg_reply_to_username": reply_to_username,
+                    "tg_reply_to_user_id": str(reply_to_user_id) if reply_to_user_id is not None else None,
+                    "tg_reply_to_text": str(reply_to_text) if reply_to_text is not None else None,
                 },
             ),
             user=Human(

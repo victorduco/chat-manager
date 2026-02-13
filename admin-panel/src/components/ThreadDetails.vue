@@ -142,6 +142,13 @@
         >
           🧠 Records ({{ memoryRecords.length }})
         </button>
+        <button
+          class="tab"
+          :class="{ active: activeTab === 'highlights' }"
+          @click="activeTab = 'highlights'"
+        >
+          ⭐ Highlights ({{ highlights.length }})
+        </button>
       </div>
 
       <!-- Users Tab -->
@@ -269,6 +276,65 @@
           </table>
         </div>
       </div>
+
+      <!-- Highlights Tab -->
+      <div v-show="activeTab === 'highlights'" class="tab-content">
+        <div v-if="highlights.length === 0" class="no-data">
+          No highlights found in this thread
+        </div>
+
+        <div v-else class="highlights-container">
+          <table class="highlights-table">
+            <thead>
+              <tr>
+                <th>Published</th>
+                <th>Category</th>
+                <th>Tags</th>
+                <th>Highlight Description</th>
+                <th>Message Text</th>
+                <th>Highlight Link</th>
+                <th>Author</th>
+                <th>Expires</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(h, index) in highlights" :key="h.id || index">
+                <td class="highlights-date">
+                  {{ formatDateTime(h.published_at) }}
+                </td>
+                <td class="highlights-category">
+                  <code>{{ h.category || '—' }}</code>
+                </td>
+                <td class="highlights-tags">
+                  <span v-if="!h.tags || h.tags.length === 0" class="na">—</span>
+                  <span v-else>{{ h.tags.join(', ') }}</span>
+                </td>
+                <td class="highlights-description">
+                  {{ h.highlight_description || h.description || '' }}
+                </td>
+                <td class="highlights-text">
+                  {{ h.message_text || '' }}
+                </td>
+                <td class="highlights-link">
+                  <a v-if="isExternalLink(h.highlight_link || h.message_link)" :href="h.highlight_link || h.message_link" target="_blank" rel="noopener noreferrer">
+                    Open highlight
+                  </a>
+                  <code v-else-if="h.highlight_link || h.message_link">{{ h.highlight_link || h.message_link }}</code>
+                  <span v-else class="na">—</span>
+                </td>
+                <td class="highlights-author">
+                  <span v-if="h.author_username">@{{ h.author_username }}</span>
+                  <span v-else class="na">—</span>
+                </td>
+                <td class="highlights-expires">
+                  <span v-if="h.expires_at">{{ formatDateTime(h.expires_at) }}</span>
+                  <span v-else class="na">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -333,6 +399,17 @@ const memoryRecords = computed(() => {
   arr.sort((a, b) => {
     const ta = Date.parse(a?.created_at || '') || 0
     const tb = Date.parse(b?.created_at || '') || 0
+    return tb - ta
+  })
+  return arr
+})
+
+const highlights = computed(() => {
+  const raw = state.value?.values?.highlights
+  const arr = Array.isArray(raw) ? raw.slice() : []
+  arr.sort((a, b) => {
+    const ta = Date.parse(a?.published_at || '') || 0
+    const tb = Date.parse(b?.published_at || '') || 0
     return tb - ta
   })
   return arr
@@ -614,6 +691,11 @@ function truncateId(id) {
   return id.length > 12 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id
 }
 
+function isExternalLink(link) {
+  const v = String(link || '').trim().toLowerCase()
+  return v.startsWith('http://') || v.startsWith('https://')
+}
+
 watch(() => props.threadId, (newId) => {
   if (newId) {
     loadThreadState()
@@ -666,6 +748,35 @@ watch(() => props.threadId, (newId) => {
 }
 
 .records-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.highlights-container {
+  padding: 0.75rem 1rem 1rem 1rem;
+}
+
+.highlights-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.highlights-table th,
+.highlights-table td {
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  vertical-align: top;
+}
+
+.highlights-date {
+  white-space: nowrap;
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+
+.highlights-text {
   white-space: pre-wrap;
   word-break: break-word;
 }

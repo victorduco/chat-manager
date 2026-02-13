@@ -79,9 +79,11 @@ def add_memory_record(
     from_username: Optional[str] = None,
 ) -> str:
     """
-    Add a new memory record to the thread-level memory.
+    Add a new idea/task/note to the thread-level ideas log.
 
-    Use this to store ideas/suggestions/tasks mentioned in chat.
+    Use this for abstract notes without a specific resource link.
+    If the user is saving a useful link/material (article/video/channel/tool/job/service),
+    use add_highlights instead.
 
     Args:
     - category: str (e.g., "Предложение")
@@ -103,7 +105,7 @@ def add_memory_record(
 def list_memory_records(
     state: Annotated[InternalState, InjectedState],
 ) -> list[dict]:
-    """Return all memory records (most recent first)."""
+    """Return all idea records (most recent first)."""
     return _list_memory_records_impl(state=state)
 
 

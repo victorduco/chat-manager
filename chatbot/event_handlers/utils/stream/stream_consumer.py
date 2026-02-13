@@ -74,7 +74,11 @@ class StreamConsumer():
                 #     await image_responder(item)
 
     async def reaction_responder(self, item: Reaction):
-        await self.tg_message.set_reaction(item.value)
+        try:
+            await self.tg_message.set_reaction(item.value)
+            logging.info(f"Set reaction ok: {item.value}")
+        except Exception as e:
+            logging.error(f"Failed to set reaction: {item.value} error={e}", exc_info=True)
 
     async def system_message_responder(self, item: Action):
         text = item.value.strip()
