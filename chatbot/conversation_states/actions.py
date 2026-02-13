@@ -42,3 +42,19 @@ class ActionSender:
             value=json.dumps({"user_id": user_id, "chat_id": chat_id})
         )
         self.send_action(action)
+
+    def send_image(self, value: str):
+        """Send image action payload (JSON or URL string)."""
+        action = Action(
+            type="image",
+            value=value
+        )
+        self.send_action(action)
+
+    def send_voice(self, value: str):
+        """Send voice action payload (JSON, file_id, or URL string)."""
+        action = Action(
+            type="voice",
+            value=value
+        )
+        self.send_action(action)

@@ -3,6 +3,8 @@ from telegram.constants import ParseMode
 from event_handlers.utils.stream.stream_queue import StreamQueue
 from .message_responder import MessageResponder, sanitize_html
 import asyncio
+import io
+import base64
 from typing import Any
 from conversation_states.actions import Reaction, Action
 from telegram import Message as TgMessage
@@ -64,6 +66,10 @@ class StreamConsumer():
             match item.type:
                 case "reaction":
                     await self.reaction_responder(item)
+                case "image":
+                    await self.image_responder(item)
+                case "voice":
+                    await self.voice_responder(item)
                 case "system-message":
                     await self.system_message_responder(item)
                 case "restrict":
@@ -94,6 +100,118 @@ class StreamConsumer():
             await self.tg_message.reply_text(
                 text=f"{chunk}",
                 parse_mode=ParseMode.HTML)
+
+    async def image_responder(self, item: Action):
+        """Send image from action payload.
+
+        Supported payloads:
+        - JSON string: {"b64_json":"...", "caption":"..."} or {"url":"..."}
+        - Plain string URL (http/https)
+        """
+        raw = str(item.value or "").strip()
+        if not raw:
+            return
+
+        payload = None
+        try:
+            maybe = json.loads(raw)
+            if isinstance(maybe, dict):
+                payload = maybe
+        except Exception:
+            payload = None
+
+        try:
+            if payload is None:
+                # Fallback: plain URL.
+                if raw.startswith("http://") or raw.startswith("https://"):
+                    await self.tg_message.reply_photo(photo=raw)
+                return
+
+            caption = str(payload.get("caption") or "").strip()
+            photo_url = str(payload.get("url") or payload.get("image_url") or "").strip()
+            b64 = str(payload.get("b64_json") or payload.get("b64") or payload.get("base64") or "").strip()
+
+            if b64:
+                image_bytes = base64.b64decode(b64)
+                bio = io.BytesIO(image_bytes)
+                bio.name = "daily.png"
+                await self.tg_message.reply_photo(
+                    photo=bio,
+                    caption=caption or None,
+                    parse_mode=ParseMode.HTML if caption else None,
+                )
+                return
+
+            if photo_url.startswith("http://") or photo_url.startswith("https://"):
+                await self.tg_message.reply_photo(
+                    photo=photo_url,
+                    caption=caption or None,
+                    parse_mode=ParseMode.HTML if caption else None,
+                )
+                return
+        except Exception as e:
+            logging.error(f"Failed to send image action: {e}", exc_info=True)
+
+    async def voice_responder(self, item: Action):
+        """Send voice from action payload.
+
+        Supported payloads:
+        - JSON string: {"b64":"...", "mime_type":"audio/ogg", "filename":"voice.ogg", "caption":"..."}
+        - JSON string: {"url":"..."} or {"file_id":"..."}
+        - Plain string URL or Telegram file_id
+        """
+        raw = str(item.value or "").strip()
+        if not raw:
+            return
+
+        payload = None
+        try:
+            maybe = json.loads(raw)
+            if isinstance(maybe, dict):
+                payload = maybe
+        except Exception:
+            payload = None
+
+        try:
+            if payload is None:
+                # Fallback: plain URL or file_id.
+                await self.tg_message.reply_voice(voice=raw)
+                return
+
+            caption = str(payload.get("caption") or "").strip()
+            voice_url = str(payload.get("url") or payload.get("voice_url") or "").strip()
+            file_id = str(payload.get("file_id") or "").strip()
+            b64 = str(payload.get("b64_json") or payload.get("b64") or payload.get("base64") or "").strip()
+            filename = str(payload.get("filename") or "").strip() or "voice.ogg"
+
+            if b64:
+                voice_bytes = base64.b64decode(b64)
+                bio = io.BytesIO(voice_bytes)
+                bio.name = filename
+                await self.tg_message.reply_voice(
+                    voice=bio,
+                    caption=caption or None,
+                    parse_mode=ParseMode.HTML if caption else None,
+                )
+                return
+
+            if file_id:
+                await self.tg_message.reply_voice(
+                    voice=file_id,
+                    caption=caption or None,
+                    parse_mode=ParseMode.HTML if caption else None,
+                )
+                return
+
+            if voice_url.startswith("http://") or voice_url.startswith("https://"):
+                await self.tg_message.reply_voice(
+                    voice=voice_url,
+                    caption=caption or None,
+                    parse_mode=ParseMode.HTML if caption else None,
+                )
+                return
+        except Exception as e:
+            logging.error(f"Failed to send voice action: {e}", exc_info=True)
 
     async def restrict_responder(self, item: Action):
         """Ban user from the chat."""

@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import os
+import json
+import io
+import base64
 from datetime import datetime, timezone
 
 import httpx
@@ -75,24 +78,93 @@ def _extract_assistant_text_from_messages_tuple(data) -> str:
         return ""
 
 
-async def _run_daily_graph_and_collect_text(client, thread_id: str, assistant_id: str) -> str:
+def _extract_actions_from_custom(data) -> list[dict]:
+    try:
+        if not isinstance(data, dict):
+            return []
+        actions = data.get("actions")
+        if not isinstance(actions, list):
+            return []
+        return [a for a in actions if isinstance(a, dict)]
+    except Exception:
+        return []
+
+
+def _parse_image_action_value(value: object) -> tuple[bytes | None, str | None]:
+    """Return (image_bytes, caption)."""
+    if value is None:
+        return None, None
+    raw = str(value)
+    payload = None
+    try:
+        maybe = json.loads(raw)
+        if isinstance(maybe, dict):
+            payload = maybe
+    except Exception:
+        payload = None
+
+    if payload is None:
+        # Unsupported in daily runner sender: plain URL/file_id are skipped.
+        return None, None
+
+    caption = str(payload.get("caption") or "").strip() or None
+    b64 = str(payload.get("b64_json") or payload.get("b64") or payload.get("base64") or "").strip()
+    if not b64:
+        return None, caption
+    try:
+        return base64.b64decode(b64), caption
+    except Exception:
+        return None, caption
+
+
+def _parse_voice_action_value(value: object) -> tuple[bytes | None, str | None]:
+    """Return (voice_bytes, caption)."""
+    if value is None:
+        return None, None
+    raw = str(value)
+    payload = None
+    try:
+        maybe = json.loads(raw)
+        if isinstance(maybe, dict):
+            payload = maybe
+    except Exception:
+        payload = None
+
+    if payload is None:
+        # Unsupported in daily runner sender: plain URL/file_id are skipped.
+        return None, None
+
+    caption = str(payload.get("caption") or "").strip() or None
+    b64 = str(payload.get("b64_json") or payload.get("b64") or payload.get("base64") or "").strip()
+    if not b64:
+        return None, caption
+    try:
+        return base64.b64decode(b64), caption
+    except Exception:
+        return None, caption
+
+
+async def _run_daily_graph_and_collect_output(client, thread_id: str, assistant_id: str) -> tuple[str, list[dict]]:
     out: list[str] = []
+    actions: list[dict] = []
     stream = client.runs.stream(
         thread_id=thread_id,
         assistant_id=assistant_id,
         input={"messages": [], "users": []},
-        stream_mode=["messages-tuple"],
+        stream_mode=["messages-tuple", "custom"],
         # Keep a hook for future routing/config.
         config={"configurable": {"trigger_type": "cron"}},
     )
     async for chunk in stream:
-        if getattr(chunk, "event", None) != "messages":
-            continue
-        text = _extract_assistant_text_from_messages_tuple(getattr(chunk, "data", None))
-        if text:
-            out.append(text)
+        event = getattr(chunk, "event", None)
+        if event == "messages":
+            text = _extract_assistant_text_from_messages_tuple(getattr(chunk, "data", None))
+            if text:
+                out.append(text)
+        elif event == "custom":
+            actions.extend(_extract_actions_from_custom(getattr(chunk, "data", None)))
     text = "".join(out).strip()
-    return text
+    return text, actions
 
 
 async def run_daily(
@@ -190,7 +262,7 @@ async def run_daily(
 
             try:
                 # Collect assistant output; fall back to a deterministic string.
-                text = await _run_daily_graph_and_collect_text(client, thread_id, assistant_id)
+                text, actions = await _run_daily_graph_and_collect_output(client, thread_id, assistant_id)
                 if text.strip() == "__NO_UPDATES__":
                     # In prod: send nothing. In dev: send a minimal marker.
                     if DEV_ENV:
@@ -217,13 +289,66 @@ async def run_daily(
                 if not text:
                     text = "hello world"  # safety net
 
-                log.info("daily_runner send preview raw=%r", text[:500])
+                log.info(
+                    "thread %s: sendMessage chat_id=%s preview=%r",
+                    thread_id,
+                    chat_id,
+                    text[:500],
+                )
                 await bot.send_message(
                     chat_id=chat_id,
                     text=text,
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
                 )
+                log.info("thread %s: sendMessage ok", thread_id)
+
+                # Optional image from custom action emitted by daily runner graph.
+                image_sent = False
+                for a in actions:
+                    if str(a.get("type") or "") != "image":
+                        continue
+                    img_bytes, caption = _parse_image_action_value(a.get("value"))
+                    if not img_bytes:
+                        log.info("thread %s: image action without bytes; skipping", thread_id)
+                        continue
+                    log.info("thread %s: sendPhoto chat_id=%s", thread_id, chat_id)
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=io.BytesIO(img_bytes),
+                        caption=caption or None,
+                        parse_mode=ParseMode.HTML if caption else None,
+                    )
+                    log.info("thread %s: sendPhoto ok", thread_id)
+                    image_sent = True
+                    break
+                if not image_sent:
+                    log.info("thread %s: no image sent", thread_id)
+
+                # Optional voice from custom action emitted by daily runner graph.
+                voice_sent = False
+                for a in actions:
+                    if str(a.get("type") or "") != "voice":
+                        continue
+                    voice_bytes, caption = _parse_voice_action_value(a.get("value"))
+                    if not voice_bytes:
+                        log.info("thread %s: voice action without bytes; skipping", thread_id)
+                        continue
+                    log.info("thread %s: sendVoice chat_id=%s", thread_id, chat_id)
+                    bio = io.BytesIO(voice_bytes)
+                    bio.name = "daily_digest.ogg"
+                    await bot.send_voice(
+                        chat_id=chat_id,
+                        voice=bio,
+                        caption=caption or None,
+                        parse_mode=ParseMode.HTML if caption else None,
+                    )
+                    log.info("thread %s: sendVoice ok", thread_id)
+                    voice_sent = True
+                    break
+                if not voice_sent:
+                    log.info("thread %s: no voice sent", thread_id)
+
                 await _merge_thread_metadata(
                     http,
                     thread_id,
@@ -231,6 +356,8 @@ async def run_daily(
                         "daily_runner_last_utc_date": today,
                         "daily_runner_last_run_at": datetime.now(timezone.utc).isoformat(),
                         "daily_runner_last_had_updates": True,
+                        "daily_runner_last_sent_image": bool(image_sent),
+                        "daily_runner_last_sent_voice": bool(voice_sent),
                     },
                 )
                 ran += 1

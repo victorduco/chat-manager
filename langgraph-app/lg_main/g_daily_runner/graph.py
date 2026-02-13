@@ -4,6 +4,8 @@ import json
 import random
 import re
 import logging
+import base64
+import os
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -11,9 +13,11 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import Field
+from openai import OpenAI
 
 from conversation_states.memory import MemoryRecord
 from conversation_states.states import ExternalState
+from conversation_states.actions import Action, ActionSender
 
 
 class DailyRunnerState(ExternalState):
@@ -24,6 +28,7 @@ class DailyRunnerState(ExternalState):
 llm = ChatOpenAI(model="gpt-4.1-2025-04-14", temperature=0.2)
 # Final user-facing digest phrasing.
 llm_style = ChatOpenAI(model="gpt-5-mini", temperature=0.7)
+image_client = OpenAI()
 log = logging.getLogger("daily_runner_graph")
 
 _URL_RE = re.compile(r"https?://\S+")
@@ -330,14 +335,178 @@ def node3_compose_message(state: DailyRunnerState) -> dict:
     return {"messages": [AIMessage(content=text, name="daily_runner")]}
 
 
+def node4_generate_image(state: DailyRunnerState, writer=None) -> dict:
+    payload = dict(getattr(state, "node2_payload", {}) or {})
+    if payload.get("no_updates") is True:
+        return {}
+
+    # Find the final digest text generated in node3.
+    digest_text = ""
+    for m in reversed(list(getattr(state, "messages", []) or [])):
+        if isinstance(m, AIMessage) and (getattr(m, "name", "") == "daily_runner"):
+            digest_text = str(getattr(m, "content", "") or "").strip()
+            if digest_text:
+                break
+    if not digest_text:
+        return {}
+
+    prompt = (
+        "Create an illustration based on the community news from the digest context below.\n"
+        "The image must reflect the actual topics, mood, and activity of the community updates.\n"
+        "No logos, no brand marks, no watermarks.\n"
+        "Avoid text-heavy image; if text appears, keep it very short and readable.\n\n"
+        "Style:\n"
+        "Digital painting, polished illustration, soft cinematic lighting, warm golden hour glow, "
+        "smooth painterly shading, soft shadows without harsh outlines, subtle highlight glow on light areas, airy atmosphere.\n\n"
+        "Fixed Color Palette:\n"
+        "- Warm golden #F6C36B\n"
+        "- Soft peach #F2A07B\n"
+        "- Light cream #F5E6D3\n"
+        "- Warm beige #D8B89C\n"
+        "- Muted sage green #8FAF9A\n"
+        "- Soft olive green #6E8B6A\n"
+        "- Dusty sky blue #A7C0D8\n"
+        "- Warm brown #8B5E3C\n\n"
+        "Overall image temperature: warm.\n"
+        "No cold blue shadows.\n"
+        "Moderate contrast, no blown highlights.\n\n"
+        "Faces:\n"
+        "Aesthetically cute faces, soft facial features, smooth clean skin (no rough texture), subtle natural blush, "
+        "large expressive eyes, gentle light reflection in the eyes, natural proportions, slight glossy skin highlights but not plastic-looking.\n\n"
+        "Lighting:\n"
+        "Warm directional side lighting (like window light), soft diffusion, slight depth of field, "
+        "background slightly softer than the main subject.\n\n"
+        "Rendering:\n"
+        "High detail, smooth brush strokes, clean rendering, soft color transitions, subtle highlights, "
+        "semi-realistic digital art, no rough painterly texture.\n\n"
+        "Overall Mood:\n"
+        "Cozy, calm, creative atmosphere, balanced composition, clean framing, warm and inviting tone.\n\n"
+        "Digest context:\n"
+        f"{digest_text[:1600]}"
+    )
+
+    try:
+        img = image_client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="1024x1024",
+        )
+        b64 = (img.data[0].b64_json if img and img.data else None) or ""
+        if not b64:
+            return {}
+
+        # Validate base64 early; if invalid do nothing.
+        base64.b64decode(b64)
+        if writer:
+            sender = ActionSender(writer)
+            sender.send_action(
+                Action(
+                    type="image",
+                    value=json.dumps(
+                        {
+                            "b64_json": b64,
+                            "mime_type": "image/png",
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            )
+    except Exception:
+        log.exception("node4_generate_image failed")
+    return {}
+
+
+def node5_generate_voice(state: DailyRunnerState, writer=None) -> dict:
+    payload = dict(getattr(state, "node2_payload", {}) or {})
+    if payload.get("no_updates") is True:
+        return {}
+
+    # Reuse the final digest text generated in node3.
+    digest_text = ""
+    for m in reversed(list(getattr(state, "messages", []) or [])):
+        if isinstance(m, AIMessage) and (getattr(m, "name", "") == "daily_runner"):
+            digest_text = str(getattr(m, "content", "") or "").strip()
+            if digest_text:
+                break
+    if not digest_text:
+        return {}
+
+    try:
+        voice_prompt = (
+            "На основе дайджеста ниже напиши одну короткую вдохновляющую и поддерживающую фразу для участников сообщества.\n"
+            "Требования:\n"
+            "- 15-20 слов;\n"
+            "- русский язык;\n"
+            "- дружеский, неформальный, живой тон;\n"
+            "- без пафоса, без громких лозунгов, без канцелярита;\n"
+            "- звучит как сообщение от знакомого человека в чате;\n"
+            "- без эмодзи, без хэштегов, без кавычек;\n"
+            "- только финальный текст, без пояснений.\n\n"
+            "Дайджест:\n"
+            f"{digest_text[:1800]}"
+        )
+        voice_raw = llm_style.invoke([HumanMessage(content=voice_prompt)]).content
+        voice_text = str(voice_raw or "").strip().replace("\n", " ")
+        words = [w for w in voice_text.split() if w.strip()]
+        if not (15 <= len(words) <= 20):
+            voice_text = (
+                "Спасибо за активность сегодня: двигаемся дальше, поддерживаем друг друга и превращаем идеи в сильные результаты вместе."
+            )
+
+        tts_model = os.getenv("OPENAI_TTS_MODEL", "tts-1")
+        tts_voice = os.getenv("OPENAI_TTS_VOICE", "Ash").strip().lower()
+        log.info("node5 voice_text=%r model=%s voice=%s", voice_text[:300], tts_model, tts_voice)
+        speech = image_client.audio.speech.create(
+            model=tts_model,
+            voice=tts_voice,
+            input=voice_text,
+            response_format="opus",
+        )
+
+        audio_bytes = None
+        if hasattr(speech, "read"):
+            audio_bytes = speech.read()
+        elif hasattr(speech, "content"):
+            audio_bytes = speech.content
+        elif isinstance(speech, (bytes, bytearray)):
+            audio_bytes = bytes(speech)
+
+        if not audio_bytes:
+            return {}
+
+        b64 = base64.b64encode(audio_bytes).decode("ascii")
+        if writer:
+            sender = ActionSender(writer)
+            sender.send_action(
+                Action(
+                    type="voice",
+                    value=json.dumps(
+                        {
+                            "b64": b64,
+                            "mime_type": "audio/ogg",
+                            "filename": "daily_digest.ogg",
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            )
+    except Exception:
+        log.exception("node5_generate_voice failed")
+    return {}
+
+
 builder = StateGraph(DailyRunnerState)
 builder.add_node("node1_select_top5", node1_select_top5)
 builder.add_node("node2_aggregate", node2_aggregate)
 builder.add_node("node3_compose_message", node3_compose_message)
+builder.add_node("node4_generate_image", node4_generate_image)
+builder.add_node("node5_generate_voice", node5_generate_voice)
 
 builder.add_edge(START, "node1_select_top5")
 builder.add_edge("node1_select_top5", "node2_aggregate")
 builder.add_edge("node2_aggregate", "node3_compose_message")
-builder.add_edge("node3_compose_message", END)
+builder.add_edge("node3_compose_message", "node4_generate_image")
+builder.add_edge("node4_generate_image", "node5_generate_voice")
+builder.add_edge("node5_generate_voice", END)
 
 graph_daily_runner = builder.compile()
