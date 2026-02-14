@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import Field
@@ -23,6 +24,8 @@ from conversation_states.actions import Action, ActionSender
 class DailyRunnerState(ExternalState):
     node1_selected: list[dict] = Field(default_factory=list)
     node2_payload: dict = Field(default_factory=dict)
+    window_since_utc: str | None = None
+    window_until_utc: str | None = None
 
 
 llm = ChatOpenAI(model="gpt-4.1-2025-04-14", temperature=0.2)
@@ -53,6 +56,8 @@ CLOSING_VARIANTS = [
     "энергичное и позитивное",
     "спокойно мотивирующее",
 ]
+
+DAILY_VOICE_PROBABILITY = 0.25
 
 
 def _safe_zoneinfo(tz_name: str) -> ZoneInfo:
@@ -96,14 +101,46 @@ def _extract_tg_meta(msg: HumanMessage) -> tuple[datetime | None, str | None]:
     return dt, link
 
 
-def _collect_messages_last_24h(state: ExternalState, *, now_utc: datetime, tz: ZoneInfo) -> list[dict]:
-    since_utc = now_utc - timedelta(hours=24)
+def _window_bounds(
+    state: DailyRunnerState,
+    config: RunnableConfig | None,
+    *,
+    now_utc: datetime,
+) -> tuple[datetime, datetime]:
+    # Primary source: values passed in run input (stable across runtimes).
+    since_utc = _parse_dt(getattr(state, "window_since_utc", None))
+    until_utc = _parse_dt(getattr(state, "window_until_utc", None))
+    if since_utc and until_utc:
+        if since_utc >= until_utc:
+            return until_utc - timedelta(hours=24), until_utc
+        return since_utc, until_utc
+
+    # Secondary source: configurable context.
+    cfg = (config or {}).get("configurable", {}) if isinstance(config, dict) else {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    since_utc = _parse_dt(cfg.get("daily_window_since_utc"))
+    until_utc = _parse_dt(cfg.get("daily_window_until_utc")) or now_utc
+    if since_utc is None:
+        since_utc = until_utc - timedelta(hours=24)
+    if since_utc >= until_utc:
+        since_utc = until_utc - timedelta(hours=24)
+    return since_utc, until_utc
+
+
+def _collect_messages_in_window(
+    state: ExternalState,
+    *,
+    since_utc: datetime,
+    until_utc: datetime,
+    tz: ZoneInfo,
+) -> list[dict]:
     out: list[dict] = []
     for m in (state.messages or []):
         if not isinstance(m, HumanMessage):
             continue
         dt, link = _extract_tg_meta(m)
-        if not dt or dt < since_utc:
+        if not dt or dt < since_utc or dt > until_utc:
             continue
         author = getattr(m, "name", None) or "unknown"
         text = str(getattr(m, "content", "") or "").strip().replace("\n", " ")
@@ -122,8 +159,12 @@ def _collect_messages_last_24h(state: ExternalState, *, now_utc: datetime, tz: Z
     return out
 
 
-def _collect_new_participants_count(state: ExternalState, *, now_utc: datetime) -> int:
-    since_utc = now_utc - timedelta(hours=24)
+def _collect_new_participants_count(
+    state: ExternalState,
+    *,
+    since_utc: datetime,
+    until_utc: datetime,
+) -> int:
     before: set[str] = set()
     recent: set[str] = set()
     for m in (state.messages or []):
@@ -133,25 +174,36 @@ def _collect_new_participants_count(state: ExternalState, *, now_utc: datetime) 
         if not dt:
             continue
         author = getattr(m, "name", None) or "unknown"
-        if dt >= since_utc:
+        if since_utc <= dt <= until_utc:
             recent.add(author)
-        else:
+        elif dt < since_utc:
             before.add(author)
     return len(recent - before)
 
 
-def _collect_intro_messages_last_24h(state: ExternalState, *, now_utc: datetime, tz: ZoneInfo) -> list[dict]:
-    msgs = _collect_messages_last_24h(state, now_utc=now_utc, tz=tz)
+def _collect_intro_messages_in_window(
+    state: ExternalState,
+    *,
+    since_utc: datetime,
+    until_utc: datetime,
+    tz: ZoneInfo,
+) -> list[dict]:
+    msgs = _collect_messages_in_window(state, since_utc=since_utc, until_utc=until_utc, tz=tz)
     return [m for m in msgs if "#intro" in (m.get("text", "").lower())]
 
 
-def _collect_records_last_24h(state: ExternalState, *, now_utc: datetime, tz: ZoneInfo) -> list[dict]:
-    since_utc = now_utc - timedelta(hours=24)
+def _collect_records_in_window(
+    state: ExternalState,
+    *,
+    since_utc: datetime,
+    until_utc: datetime,
+    tz: ZoneInfo,
+) -> list[dict]:
     out: list[dict] = []
     recs: list[MemoryRecord] = list(getattr(state, "memory_records", []) or [])
     for r in recs:
         created = _parse_dt(getattr(r, "created_at", None))
-        if not created or created < since_utc:
+        if not created or created < since_utc or created > until_utc:
             continue
         text = str(getattr(r, "text", "") or "").strip().replace("\n", " ")
         if len(text) > 350:
@@ -172,11 +224,12 @@ def _collect_records_last_24h(state: ExternalState, *, now_utc: datetime, tz: Zo
     return out
 
 
-def node1_select_top5(state: DailyRunnerState) -> dict:
+def node1_select_top5(state: DailyRunnerState, config: RunnableConfig | None = None) -> dict:
     tz_name = _get_tz_name(state)
     tz = _safe_zoneinfo(tz_name)
     now_utc = datetime.now(timezone.utc)
-    recent = _collect_messages_last_24h(state, now_utc=now_utc, tz=tz)
+    since_utc, until_utc = _window_bounds(state, config, now_utc=now_utc)
+    recent = _collect_messages_in_window(state, since_utc=since_utc, until_utc=until_utc, tz=tz)
 
     if not recent:
         return {"node1_selected": []}
@@ -210,7 +263,9 @@ def node1_select_top5(state: DailyRunnerState) -> dict:
     user = HumanMessage(
         content=(
             f"Timezone: {tz_name}\n"
-            f"Now UTC: {now_utc.isoformat(timespec='minutes')}\n"
+            f"Now UTC: {until_utc.isoformat(timespec='minutes')}\n"
+            f"Window since UTC: {since_utc.isoformat(timespec='minutes')}\n"
+            f"Window until UTC: {until_utc.isoformat(timespec='minutes')}\n"
             "Messages JSON:\n"
             + json.dumps(recent, ensure_ascii=False)
         )
@@ -263,22 +318,22 @@ def node1_select_top5(state: DailyRunnerState) -> dict:
     return {"node1_selected": clean[:5]}
 
 
-def node2_aggregate(state: DailyRunnerState) -> dict:
+def node2_aggregate(state: DailyRunnerState, config: RunnableConfig | None = None) -> dict:
     tz_name = _get_tz_name(state)
     tz = _safe_zoneinfo(tz_name)
     now_utc = datetime.now(timezone.utc)
-    since_utc = now_utc - timedelta(hours=24)
+    since_utc, until_utc = _window_bounds(state, config, now_utc=now_utc)
 
     selected = list(getattr(state, "node1_selected", []) or [])
-    intro_messages = _collect_intro_messages_last_24h(state, now_utc=now_utc, tz=tz)
-    records_24h = _collect_records_last_24h(state, now_utc=now_utc, tz=tz)
-    new_participants_count = _collect_new_participants_count(state, now_utc=now_utc)
+    intro_messages = _collect_intro_messages_in_window(state, since_utc=since_utc, until_utc=until_utc, tz=tz)
+    records_24h = _collect_records_in_window(state, since_utc=since_utc, until_utc=until_utc, tz=tz)
+    new_participants_count = _collect_new_participants_count(state, since_utc=since_utc, until_utc=until_utc)
 
     payload = {
         "window": {
             "timezone": tz_name,
             "since_utc": since_utc.isoformat(timespec="minutes"),
-            "until_utc": now_utc.isoformat(timespec="minutes"),
+            "until_utc": until_utc.isoformat(timespec="minutes"),
         },
         "selected_messages": selected,
         "new_participants_count": new_participants_count,
@@ -304,7 +359,7 @@ def node3_compose_message(state: DailyRunnerState) -> dict:
     closing = random.choice(CLOSING_VARIANTS)
 
     prompt = (
-        "Ты пишешь ежедневный дайджест за последние 24 часа на русском.\n"
+        "Ты пишешь дайджест за указанный период на русском.\n"
         "- Верни только ГОТОВЫЙ ФИНАЛЬНЫЙ ТЕКСТ сообщения\n"
         "- Формат Telegram: обычный текст + HTML-ссылки.\n"
         "- Если пункт ссылается на сообщение, используй HTML-ссылку из 1-2 слов внутри фразы. Пример: Новый участник <a href=\"https://t.me/c/1/2\">представился</a> в чате.\n\n"
@@ -314,7 +369,7 @@ def node3_compose_message(state: DailyRunnerState) -> dict:
         f"- Пожелание/Прощание: {closing}\n"
         "</тон>\n\n"
         "<структура ответа>\n"
-        "- Приветствие/вступление: обязательно укажи, что это сводка/дайджест за последние сутки/24 часа.\n"
+        "- Приветствие/вступление: обязательно укажи, что это сводка/дайджест за указанный период.\n"
         "- Пустая строка\n"
         "- Самые важные 2-3 пункта списком, каждый <= 15 слов.\n"
         "- [Опционально, только если есть еще другие важные события] Пустая строка\n"
@@ -432,13 +487,8 @@ def node5_generate_voice(state: DailyRunnerState, writer=None) -> dict:
         return {}
 
     try:
-        # Local/ops-configurable probability gate for voice generation.
-        # If skipped, do not generate voice text and do not call TTS API.
-        try:
-            prob = float(os.getenv("DAILY_RUNNER_VOICE_PROBABILITY", "1.0"))
-        except Exception:
-            prob = 1.0
-        prob = max(0.0, min(1.0, prob))
+        # Simple random gate: generate voice with fixed probability.
+        prob = DAILY_VOICE_PROBABILITY
         roll = random.random()
         if roll >= prob:
             log.info("node5 voice skipped by probability gate roll=%.4f prob=%.4f", roll, prob)

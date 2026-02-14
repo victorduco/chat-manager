@@ -38,7 +38,10 @@ class ContextExtractor(BaseModel):
         reply_to_user = getattr(reply_to_message, "from_user", None)
         reply_to_username = getattr(reply_to_user, "username", None) if reply_to_user else None
         reply_to_user_id = getattr(reply_to_user, "id", None) if reply_to_user else None
+        reply_to_is_bot = bool(getattr(reply_to_user, "is_bot", False)) if reply_to_user else False
         reply_to_text = getattr(reply_to_message, "text", None)
+        bot_username = getattr(getattr(context, "bot", None), "username", None)
+        bot_id = getattr(getattr(context, "bot", None), "id", None)
 
         msg_link = cls._build_tg_message_link(
             chat_id=chat_id,
@@ -69,7 +72,10 @@ class ContextExtractor(BaseModel):
                     "tg_reply_to_link": reply_link,
                     "tg_reply_to_username": reply_to_username,
                     "tg_reply_to_user_id": str(reply_to_user_id) if reply_to_user_id is not None else None,
+                    "tg_reply_to_is_bot": reply_to_is_bot,
                     "tg_reply_to_text": str(reply_to_text) if reply_to_text is not None else None,
+                    "tg_bot_username": str(bot_username) if bot_username else None,
+                    "tg_bot_user_id": str(bot_id) if bot_id is not None else None,
                 },
             ),
             user=Human(

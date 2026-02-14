@@ -50,7 +50,7 @@ import ThreadDetails from './components/ThreadDetails.vue'
 import { getCurrentEnvironment, setEnvironment } from './services/api'
 
 const VALID_ENVS = new Set(['dev', 'prod'])
-const VALID_TABS = new Set(['users', 'messages', 'records', 'highlights'])
+const VALID_TABS = new Set(['users', 'messages', 'records', 'highlights', 'improvements', 'thread_info'])
 
 const currentEnv = ref(getCurrentEnvironment())
 const selectedThreadId = ref(null)

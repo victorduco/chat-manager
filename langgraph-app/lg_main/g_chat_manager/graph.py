@@ -22,10 +22,13 @@ def prepare_external(state: InternalState) -> ExternalState:
             summary=state.summary,
             last_reasoning=state.reasoning_messages,
             memory_records=list(getattr(state, "memory_records", []) or []),
+            highlights=list(getattr(state, "highlights", []) or []),
+            improvements=list(getattr(state, "improvements", []) or []),
+            chat_manager_response_stats=dict(getattr(state, "chat_manager_response_stats", {}) or {}),
         )
 
     [msg] = last
-    # If agent produced empty output, treat it as no-op.
+    # If responder produced empty output, treat it as no-op.
     if getattr(msg, "content", "") == "":
         return ExternalState(
             messages=[],
@@ -33,6 +36,9 @@ def prepare_external(state: InternalState) -> ExternalState:
             summary=state.summary,
             last_reasoning=state.reasoning_messages,
             memory_records=list(getattr(state, "memory_records", []) or []),
+            highlights=list(getattr(state, "highlights", []) or []),
+            improvements=list(getattr(state, "improvements", []) or []),
+            chat_manager_response_stats=dict(getattr(state, "chat_manager_response_stats", {}) or {}),
         )
 
     return ExternalState.from_internal(state, msg)
@@ -49,4 +55,3 @@ builder.add_edge("chat_manager", "prepare_external")
 builder.add_edge("prepare_external", END)
 
 graph_chat_manager = builder.compile()
-

@@ -4,7 +4,7 @@ import os
 import json
 import io
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from langgraph_sdk import get_client
@@ -19,6 +19,21 @@ log = logging.getLogger("daily_runner")
 
 def _utc_date_str_now() -> str:
     return datetime.now(timezone.utc).date().isoformat()
+
+
+def _parse_dt(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s)
+    except Exception:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _base_url() -> str:
@@ -144,16 +159,34 @@ def _parse_voice_action_value(value: object) -> tuple[bytes | None, str | None]:
         return None, caption
 
 
-async def _run_daily_graph_and_collect_output(client, thread_id: str, assistant_id: str) -> tuple[str, list[dict]]:
+async def _run_daily_graph_and_collect_output(
+    client,
+    thread_id: str,
+    assistant_id: str,
+    *,
+    since_utc: datetime,
+    until_utc: datetime,
+) -> tuple[str, list[dict]]:
     out: list[str] = []
     actions: list[dict] = []
     stream = client.runs.stream(
         thread_id=thread_id,
         assistant_id=assistant_id,
-        input={"messages": [], "users": []},
+        input={
+            "messages": [],
+            "users": [],
+            "window_since_utc": since_utc.isoformat(),
+            "window_until_utc": until_utc.isoformat(),
+        },
         stream_mode=["messages-tuple", "custom"],
         # Keep a hook for future routing/config.
-        config={"configurable": {"trigger_type": "cron"}},
+        config={
+            "configurable": {
+                "trigger_type": "cron",
+                "daily_window_since_utc": since_utc.isoformat(),
+                "daily_window_until_utc": until_utc.isoformat(),
+            }
+        },
     )
     async for chunk in stream:
         event = getattr(chunk, "event", None)
@@ -174,6 +207,7 @@ async def run_daily(
     force: bool = False,
     bootstrap_enable_n: int = 0,
     assistant_id: str = "graph_daily_runner",
+    skip_weekend_rule: bool = False,
 ) -> dict:
     token = os.getenv("TELEGRAM_TOKEN", "").strip()
     if not token:
@@ -181,7 +215,18 @@ async def run_daily(
 
     bot = Bot(token=token)
     client = get_client(url=os.getenv("LANGGRAPH_API_URL"))
-    today = _utc_date_str_now()
+    now_utc = datetime.now(timezone.utc)
+    today = now_utc.date().isoformat()
+
+    # Global weekend gate: skip daily runner entirely on UTC Saturday/Sunday.
+    if (not skip_weekend_rule) and now_utc.weekday() >= 5:
+        log.info("daily_runner: weekend UTC detected (%s), skipping all threads", today)
+        return {
+            "ran": 0,
+            "skipped": 0,
+            "failed": 0,
+            "processed_thread_ids": [],
+        }
 
     timeout = httpx.Timeout(30.0)
     async with httpx.AsyncClient(timeout=timeout) as http:
@@ -249,11 +294,6 @@ async def run_daily(
             if not isinstance(meta, dict):
                 meta = {}
 
-            last = str(meta.get("daily_runner_last_utc_date") or "").strip()
-            if (not force) and last == today:
-                skipped += 1
-                continue
-
             chat_id = meta.get("chat_id")
             if chat_id is None or str(chat_id).strip() == "":
                 log.warning("thread %s: missing metadata.chat_id; skipping", thread_id)
@@ -261,8 +301,19 @@ async def run_daily(
                 continue
 
             try:
+                run_now_utc = datetime.now(timezone.utc)
+                last_covered_until = _parse_dt(meta.get("daily_runner_last_covered_until_utc"))
+                period_since_utc = last_covered_until or (run_now_utc - timedelta(hours=24))
+                period_until_utc = run_now_utc
+
                 # Collect assistant output; fall back to a deterministic string.
-                text, actions = await _run_daily_graph_and_collect_output(client, thread_id, assistant_id)
+                text, actions = await _run_daily_graph_and_collect_output(
+                    client,
+                    thread_id,
+                    assistant_id,
+                    since_utc=period_since_utc,
+                    until_utc=period_until_utc,
+                )
                 if text.strip() == "__NO_UPDATES__":
                     # In prod: send nothing. In dev: send a minimal marker.
                     if DEV_ENV:
@@ -280,8 +331,11 @@ async def run_daily(
                         thread_id,
                         {
                             "daily_runner_last_utc_date": today,
-                            "daily_runner_last_run_at": datetime.now(timezone.utc).isoformat(),
+                            "daily_runner_last_run_at": run_now_utc.isoformat(),
                             "daily_runner_last_had_updates": False,
+                            "daily_runner_last_period_since_utc": period_since_utc.isoformat(),
+                            "daily_runner_last_period_until_utc": period_until_utc.isoformat(),
+                            "daily_runner_last_covered_until_utc": period_until_utc.isoformat(),
                         },
                     )
                     continue
@@ -354,10 +408,13 @@ async def run_daily(
                     thread_id,
                     {
                         "daily_runner_last_utc_date": today,
-                        "daily_runner_last_run_at": datetime.now(timezone.utc).isoformat(),
+                        "daily_runner_last_run_at": run_now_utc.isoformat(),
                         "daily_runner_last_had_updates": True,
                         "daily_runner_last_sent_image": bool(image_sent),
                         "daily_runner_last_sent_voice": bool(voice_sent),
+                        "daily_runner_last_period_since_utc": period_since_utc.isoformat(),
+                        "daily_runner_last_period_until_utc": period_until_utc.isoformat(),
+                        "daily_runner_last_covered_until_utc": period_until_utc.isoformat(),
                     },
                 )
                 ran += 1

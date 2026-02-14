@@ -1,6 +1,7 @@
 from typing import Optional, Union, Any
 from conversation_states.humans import Human
 from conversation_states.highlights import Highlight
+from conversation_states.improvements import Improvement
 from conversation_states.memory import MemoryRecord
 
 
@@ -121,6 +122,26 @@ def add_highlights(left: list["Highlight"], right: list["Highlight"]) -> list["H
         target.published_at = rh.published_at
         target.expires_at = rh.expires_at
         target.deleted_at = rh.deleted_at
+
+    return left
+
+
+def add_improvements(left: list["Improvement"], right: list["Improvement"]) -> list["Improvement"]:
+    right = [i if isinstance(i, Improvement) else Improvement(**i) for i in right or []]
+
+    by_id = {getattr(i, "id", None): i for i in left or [] if getattr(i, "id", None)}
+    for ri in right:
+        target = by_id.get(ri.id)
+        if target is None:
+            left.append(ri)
+            by_id[ri.id] = ri
+            continue
+
+        target.category = ri.category
+        target.description = ri.description
+        target.reporter = ri.reporter
+        target.status = ri.status
+        target.created_at = ri.created_at
 
     return left
 

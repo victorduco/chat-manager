@@ -2,7 +2,7 @@ from telegram.constants import ParseMode
 from telegram import Message as TgMessage
 import asyncio
 from datetime import datetime
-from typing import Literal
+from typing import Dict, Literal
 import re
 import html
 
@@ -24,8 +24,23 @@ def sanitize_html(text: str) -> str:
     allowed_tags = ['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a', 'span']
 
     # Remove unsupported opening/closing tags but keep content
-    text = re.sub(r'<(?!/?)(?!(?:' + '|'.join(allowed_tags) + r')\b)[^>]+>', '', text)
-    text = re.sub(r'</(?!(?:' + '|'.join(allowed_tags) + r')\b)[^>]+>', '', text)
+    text = re.sub(r'<(?!/?)(?!(?:' + '|'.join(allowed_tags) + r')\b)[^>]*>', '', text)
+    text = re.sub(r'</(?!(?:' + '|'.join(allowed_tags) + r')\b)[^>]*>', '', text)
+
+    # Protect allowed tags, escape all other raw HTML chars, then restore tags.
+    # This prevents plain-text fragments like "> ^ <" from being parsed as HTML.
+    protected_tags: list[str] = []
+
+    def _protect_tag(match: re.Match[str]) -> str:
+        protected_tags.append(match.group(0))
+        return f"__TG_TAG_{len(protected_tags) - 1}__"
+
+    allowed_tag_pattern = re.compile(r'</?(?:' + '|'.join(allowed_tags) + r')\b[^>]*>')
+    text = allowed_tag_pattern.sub(_protect_tag, text)
+    text = html.escape(text, quote=False)
+
+    for idx, tag in enumerate(protected_tags):
+        text = text.replace(f"__TG_TAG_{idx}__", tag)
 
     return text
 
@@ -42,6 +57,7 @@ class Response:
         self.cur_txt = cur_txt
         self.last_sent = datetime.now()
         self.buffer = []
+        self.flushed_once = False
 
     def append(self, chunk: str):
         self.buffer.append(chunk)
@@ -62,6 +78,7 @@ class Response:
         self.cur_txt = text
         self.buffer.clear()
         self.last_sent = datetime.now()
+        self.flushed_once = True
 
     def is_stale(self, timeout: float = 2.0) -> bool:
         if not self.buffer:
@@ -97,3 +114,24 @@ class MessageResponder:
         for response in self.responses.values():
             if response.is_stale():
                 await response.flush()
+
+    async def flush_all_force(self):
+        for response in self.responses.values():
+            if response.buffer:
+                await response.flush()
+
+    def sent_text_messages(self):
+        out = []
+        for run_id, response in self.responses.items():
+            text = str(response.cur_txt or "")
+            tg_message_id = getattr(response.ai_msg, "message_id", None)
+            tg_date = getattr(response.ai_msg, "date", None)
+            if not tg_message_id or not text:
+                continue
+            out.append({
+                "run_id": run_id,
+                "text": text,
+                "tg_message_id": int(tg_message_id),
+                "tg_date": tg_date.isoformat() if tg_date else None,
+            })
+        return out

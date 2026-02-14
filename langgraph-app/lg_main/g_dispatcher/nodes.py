@@ -36,5 +36,7 @@ def dispatcher_default_reply(state: ExternalState) -> ExternalState:
         summary=state.summary,
         last_reasoning=state.last_reasoning,
         memory_records=list(getattr(state, "memory_records", []) or []),
+        highlights=list(getattr(state, "highlights", []) or []),
+        improvements=list(getattr(state, "improvements", []) or []),
+        chat_manager_response_stats=dict(getattr(state, "chat_manager_response_stats", {}) or {}),
     )
-

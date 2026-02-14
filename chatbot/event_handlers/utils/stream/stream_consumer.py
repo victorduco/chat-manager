@@ -2,10 +2,12 @@ from .context_extractor import ContextExtractor
 from telegram.constants import ParseMode
 from event_handlers.utils.stream.stream_queue import StreamQueue
 from .message_responder import MessageResponder, sanitize_html
+from .state_backfill import backfill_assistant_tg_message_id
 import asyncio
 import io
 import base64
 from typing import Any
+from contextlib import suppress
 from conversation_states.actions import Reaction, Action
 from telegram import Message as TgMessage
 import json
@@ -16,14 +18,32 @@ class StreamConsumer():
     queue: StreamQueue
     message_responder: MessageResponder
     tg_message: TgMessage
+    thread_id: str
+    chat_id: str
+    chat_username: str | None
 
     @classmethod
     async def initialize(cls, ctx: ContextExtractor, queue: StreamQueue):
         self = cls()
         self.queue = queue
         self.tg_message = ctx.tg_message
+        self.thread_id = str(ctx.thread_id)
+        self.chat_id = str(ctx.chat_id)
+        self.chat_username = getattr(ctx.tg_message.chat, "username", None)
         self.message_responder = MessageResponder(ctx.tg_message)
         return self
+
+    def _build_tg_message_link(self, message_id: int) -> str | None:
+        if self.chat_username:
+            u = str(self.chat_username).lstrip("@").strip()
+            if u:
+                return f"https://t.me/{u}/{message_id}"
+        s = str(self.chat_id).strip()
+        if s.startswith("-100") and len(s) > 4:
+            internal_id = s[4:]
+            if internal_id.isdigit():
+                return f"https://t.me/c/{internal_id}/{message_id}"
+        return None
 
     async def run_messages_main(self):
         q = self.queue.messages
@@ -51,10 +71,27 @@ class StreamConsumer():
             await self.message_responder.flush_all()
 
     async def run_messages(self):
-        await asyncio.gather(
-            self.run_messages_main(),
-            self.periodic_message_flush()
-        )
+        periodic_task = asyncio.create_task(self.periodic_message_flush())
+        await self.run_messages_main()
+        periodic_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await periodic_task
+
+        # Ensure final buffered chunks are flushed and persist real Telegram ids
+        # for assistant text messages in LangGraph state.
+        await self.message_responder.flush_all_force()
+        for sent in self.message_responder.sent_text_messages():
+            try:
+                await backfill_assistant_tg_message_id(
+                    thread_id=self.thread_id,
+                    chat_id=self.chat_id,
+                    tg_message_id=int(sent["tg_message_id"]),
+                    tg_date_iso=sent.get("tg_date"),
+                    expected_text=str(sent.get("text") or ""),
+                    tg_link=self._build_tg_message_link(int(sent["tg_message_id"])),
+                )
+            except Exception:
+                logging.exception("Failed to backfill tg_message_id for assistant text message")
 
     async def run_actions(self):
         q = self.queue.actions
@@ -63,6 +100,7 @@ class StreamConsumer():
             q.task_done()
             if item is None:
                 break
+            logging.info("Consuming action: type=%s value=%r", item.type, item.value)
             match item.type:
                 case "reaction":
                     await self.reaction_responder(item)
@@ -97,9 +135,20 @@ class StreamConsumer():
                   for i in range(0, len(sanitized_text), max_length)]
 
         for chunk in chunks:
-            await self.tg_message.reply_text(
+            sent = await self.tg_message.reply_text(
                 text=f"{chunk}",
                 parse_mode=ParseMode.HTML)
+            try:
+                await backfill_assistant_tg_message_id(
+                    thread_id=self.thread_id,
+                    chat_id=self.chat_id,
+                    tg_message_id=int(sent.message_id),
+                    tg_date_iso=sent.date.isoformat() if getattr(sent, "date", None) else None,
+                    expected_text=str(chunk),
+                    tg_link=self._build_tg_message_link(int(sent.message_id)),
+                )
+            except Exception:
+                logging.exception("Failed to backfill tg_message_id for system-message chunk")
 
     async def image_responder(self, item: Action):
         """Send image from action payload.

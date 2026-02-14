@@ -184,6 +184,20 @@
         >
           ⭐ Highlights ({{ highlights.length }})
         </button>
+        <button
+          class="tab"
+          :class="{ active: activeTab === 'improvements' }"
+          @click="activeTab = 'improvements'"
+        >
+          🛠 Improvements ({{ improvements.length }})
+        </button>
+        <button
+          class="tab"
+          :class="{ active: activeTab === 'thread_info' }"
+          @click="activeTab = 'thread_info'"
+        >
+          📌 Thread Info ({{ threadInfoItems.length }})
+        </button>
       </div>
 
       <!-- Users Tab -->
@@ -412,6 +426,88 @@
           </table>
         </div>
       </div>
+
+      <!-- Improvements Tab -->
+      <div v-show="activeTab === 'improvements'" class="tab-content">
+        <div v-if="improvements.length === 0" class="no-data">
+          No improvements found in this thread
+        </div>
+
+        <div v-else class="improvements-container">
+          <table class="improvements-table">
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Reporter</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, index) in improvements" :key="item.id || index">
+                <td class="improvements-date">
+                  {{ formatDateTime(item.created_at) }}
+                </td>
+                <td class="improvements-category">
+                  <code>{{ item.category || '—' }}</code>
+                </td>
+                <td class="improvements-status">
+                  <code>{{ item.status || '—' }}</code>
+                </td>
+                <td class="improvements-reporter">
+                  <span v-if="item.reporter">@{{ String(item.reporter).replace(/^@+/, '') }}</span>
+                  <span v-else class="na">—</span>
+                </td>
+                <td class="improvements-description">
+                  {{ item.description || '' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Thread Info Tab -->
+      <div v-show="activeTab === 'thread_info'" class="tab-content">
+        <div class="thread-info-container">
+          <table class="thread-info-table">
+            <tbody>
+              <tr>
+                <th>Title</th>
+                <td>{{ threadMetaTitle || '—' }}</td>
+              </tr>
+              <tr>
+                <th>Username</th>
+                <td>
+                  <span v-if="threadMetaUsername">@{{ threadMetaUsername }}</span>
+                  <span v-else class="na">—</span>
+                </td>
+              </tr>
+              <tr>
+                <th>Description</th>
+                <td class="thread-info-multiline">{{ threadMetaDescription || '—' }}</td>
+              </tr>
+              <tr>
+                <th>Pinned</th>
+                <td class="thread-info-multiline">{{ threadMetaPinnedText || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="thread-info-list-block">
+            <div class="thread-info-list-title">Thread Info Entries</div>
+            <div v-if="threadInfoItems.length === 0" class="no-data">
+              No thread info entries
+            </div>
+            <ol v-else class="thread-info-list">
+              <li v-for="(item, index) in threadInfoItems" :key="`${index}-${item}`">
+                {{ item }}
+              </li>
+            </ol>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -457,7 +553,7 @@ const settingsPopoverOpen = ref(false)
 const userRecordsPopoverKey = ref(null)
 const userInfoPopoverKey = ref(null)
 const messagesTabRef = ref(null)
-const VALID_TABS = new Set(['users', 'messages', 'records', 'highlights'])
+const VALID_TABS = new Set(['users', 'messages', 'records', 'highlights', 'improvements', 'thread_info'])
 const AUTO_REFRESH_MS = 5000
 let detailRefreshTimer = null
 
@@ -515,6 +611,42 @@ const highlights = computed(() => {
     return tb - ta
   })
   return arr
+})
+
+const improvements = computed(() => {
+  const raw = state.value?.values?.improvements
+  const arr = Array.isArray(raw) ? raw.slice() : []
+  arr.sort((a, b) => {
+    const ta = Date.parse(a?.created_at || '') || 0
+    const tb = Date.parse(b?.created_at || '') || 0
+    return tb - ta
+  })
+  return arr
+})
+
+const threadMeta = computed(() => {
+  const raw = threadInfo.value?.metadata
+  return raw && typeof raw === 'object' ? raw : {}
+})
+
+const threadInfoItems = computed(() => {
+  const raw = threadMeta.value?.thread_info
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((x) => String(x ?? '').trim())
+    .filter(Boolean)
+})
+
+const threadMetaTitle = computed(() => String(threadMeta.value?.chat_title || '').trim())
+const threadMetaUsername = computed(() => String(threadMeta.value?.chat_username || '').trim().replace(/^@+/, ''))
+const threadMetaDescription = computed(() => String(threadMeta.value?.chat_description || '').trim())
+const threadMetaPinnedText = computed(() => {
+  const pinned = threadMeta.value?.pinned_message
+  if (!pinned || typeof pinned !== 'object') return ''
+  const text = String(pinned.text || '').trim()
+  if (text) return text
+  const messageId = String(pinned.message_id || '').trim()
+  return messageId ? `message_id=${messageId}` : ''
 })
 
 const deleteBlockedByUsers = computed(() => {
@@ -1014,6 +1146,86 @@ onUnmounted(() => {
 .highlights-text {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.improvements-container {
+  padding: 0.75rem 1rem 1rem 1rem;
+}
+
+.improvements-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.improvements-table th,
+.improvements-table td {
+  border-bottom: 1px solid #edf2f7;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  vertical-align: top;
+}
+
+.improvements-date {
+  white-space: nowrap;
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+
+.improvements-description {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.thread-info-container {
+  padding: 0.75rem 1rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.thread-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.thread-info-table th,
+.thread-info-table td {
+  border-bottom: 1px solid #edf2f7;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  vertical-align: top;
+}
+
+.thread-info-table th {
+  width: 170px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.thread-info-multiline {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.thread-info-list-block {
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: #fbfdff;
+}
+
+.thread-info-list-title {
+  font-size: 0.85rem;
+  color: #334155;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.thread-info-list {
+  margin: 0;
+  padding-left: 1.2rem;
 }
 
 .graph-label {

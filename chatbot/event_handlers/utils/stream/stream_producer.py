@@ -14,6 +14,7 @@ import logging
 from event_handlers.utils.stream.stream_queue import StreamQueue, MessageContent
 from pydantic import TypeAdapter
 import httpx
+from datetime import datetime, timezone
 
 
 class StreamProducer():
@@ -70,6 +71,56 @@ class StreamProducer():
         return True
 
     @staticmethod
+    def _serialize_pinned_message(msg: TgMessage | None) -> dict | None:
+        if msg is None:
+            return None
+        dt = getattr(msg, "date", None)
+        if isinstance(dt, datetime) and dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        user = getattr(msg, "from_user", None)
+        return {
+            "message_id": getattr(msg, "message_id", None),
+            "date": dt.isoformat() if isinstance(dt, datetime) else None,
+            "text": getattr(msg, "text", None) or getattr(msg, "caption", None),
+            "from_username": getattr(user, "username", None) if user else None,
+            "from_user_id": str(getattr(user, "id", "")) if user else None,
+        }
+
+    @staticmethod
+    async def _tg_chat_metadata(ctx: ContextExtractor) -> dict:
+        """Best-effort extraction of chat metadata from update + Bot.get_chat."""
+        out: dict = {"chat_id": str(ctx.chat_id)}
+        chat = getattr(ctx.tg_message, "chat", None)
+        if chat is not None:
+            chat_title = getattr(chat, "title", None)
+            chat_username = getattr(chat, "username", None)
+            if chat_title:
+                out["chat_title"] = str(chat_title)
+            if chat_username:
+                out["chat_username"] = str(chat_username).lstrip("@")
+
+        # Enrich with full chat payload when possible (description, pinned message, canonical title).
+        try:
+            bot = ctx.tg_message.get_bot()
+            full_chat = await bot.get_chat(chat_id=int(str(ctx.chat_id)))
+            title = getattr(full_chat, "title", None) or getattr(full_chat, "username", None)
+            if title:
+                out["chat_title"] = str(title)
+            username = getattr(full_chat, "username", None)
+            if username:
+                out["chat_username"] = str(username).lstrip("@")
+            description = getattr(full_chat, "description", None)
+            if description:
+                out["chat_description"] = str(description)
+            pinned = StreamProducer._serialize_pinned_message(getattr(full_chat, "pinned_message", None))
+            if pinned:
+                out["pinned_message"] = pinned
+        except Exception:
+            logging.debug("Failed to enrich thread metadata via get_chat", exc_info=True)
+
+        return out
+
+    @staticmethod
     async def prep_stream(client, ctx):
         # New threads default to the dispatcher graph so they are safe-by-default
         # until per-thread routing (metadata.dispatch_graph_id) is configured.
@@ -81,32 +132,34 @@ class StreamProducer():
             if_exists="do_nothing",
         )
 
-        # Best-effort: store Telegram chat id and title on the LangGraph thread so cron jobs can
+        # Best-effort: store Telegram chat metadata on the LangGraph thread so cron jobs can
         # message the right chat later and admin panel can show chat info.
         try:
-            chat_title = getattr(ctx.tg_message.chat, "title", None) or getattr(ctx.tg_message.chat, "username", None)
-            metadata_update = {"chat_id": str(ctx.chat_id)}
-            if chat_title:
-                metadata_update["chat_title"] = str(chat_title)
+            metadata_update = await StreamProducer._tg_chat_metadata(ctx)
             await StreamProducer._merge_thread_metadata_http(
                 thread_id=thread["thread_id"],
                 partial=metadata_update,
             )
         except Exception:
-            logging.debug("Failed to persist chat_id/chat_title to thread metadata", exc_info=True)
+            logging.debug("Failed to persist Telegram chat metadata to thread metadata", exc_info=True)
 
         # Ensure default thread-level intro requirement exists for new/old threads,
         # but never overwrite an explicit false value.
         meta = await StreamProducer._get_thread_metadata(client, thread["thread_id"])
+        defaults: dict = {}
         if "require_intro" not in meta:
+            defaults["require_intro"] = True
+        if not isinstance(meta.get("thread_info"), list):
+            defaults["thread_info"] = []
+        if defaults:
             try:
                 await StreamProducer._merge_thread_metadata_http(
                     thread_id=thread["thread_id"],
-                    partial={"require_intro": True},
+                    partial=defaults,
                 )
-                meta = {**meta, "require_intro": True}
+                meta = {**meta, **defaults}
             except Exception:
-                logging.debug("Failed to persist default require_intro=true", exc_info=True)
+                logging.debug("Failed to persist thread metadata defaults", exc_info=True)
 
         dispatch_graph_id = StreamProducer._thread_target_graph_id_from_metadata(meta)
         require_intro = StreamProducer._require_intro_from_metadata(meta)
@@ -127,6 +180,7 @@ class StreamProducer():
             assistant_id=assistant_id,
             input=state,
             stream_mode=["messages-tuple", "custom"],
+            stream_subgraphs=True,
             config=config,
         )
         return thread, stream
@@ -152,9 +206,12 @@ class StreamProducer():
         # run stream
         try:
             async for chunk in self.stream:
-                if chunk.event == "messages":
+                logging.info("Stream chunk event=%s", chunk.event)
+                event_name = str(chunk.event or "").split("|", 1)[0]
+                if event_name == "messages":
                     await self.queue_message(chunk.data)
-                if chunk.event == "custom":
+                if event_name == "custom":
+                    logging.info("Received custom stream chunk: %r", chunk.data)
                     await self.queue_action(chunk.data)
         except Exception as e:
             logging.error("Stream processing failed", exc_info=True)
@@ -177,15 +234,35 @@ class StreamProducer():
                 await self.queue.messages.put(queue_chunk)
 
     async def queue_action(self, data):
-        action_data = data["actions"][0]
-        action = Action(**action_data)
-        await self.queue.actions.put(action)
-        pass
+        actions_raw = None
+        if isinstance(data, dict):
+            if isinstance(data.get("actions"), list):
+                actions_raw = data.get("actions")
+            elif isinstance(data.get("action"), dict):
+                actions_raw = [data.get("action")]
+        elif isinstance(data, list):
+            actions_raw = data
+
+        if not actions_raw:
+            logging.warning("Ignoring malformed custom action payload: %r", data)
+            return
+
+        for raw in actions_raw:
+            if not isinstance(raw, dict):
+                logging.warning("Ignoring malformed action item: %r", raw)
+                continue
+            try:
+                action = Action(**raw)
+                await self.queue.actions.put(action)
+                logging.info("Queued action: type=%s value=%r", action.type, action.value)
+            except Exception:
+                logging.exception("Failed to parse action item: %r", raw)
 
     def get_chunk_text(self, data):
         try:
             content = data[0]["content"]
             msg_type = data[0].get("type")
+            msg_name = data[0].get("name")
             node = data[1]["langgraph_node"]
             # todo check what id to use
             message_id = data[1]["run_id"]
@@ -212,14 +289,40 @@ class StreamProducer():
         blocked_nodes = {
             "prepare_internal",
             "prepare_external",
+            "agent",
+            "doer",
             "intro_checker",
             "intro_quality_guard",
             "mention_checker",
             "strict_mention_checker",
             "mentioned_quality_guard",
+            "mentioned_block_response",
             "unmentioned_relevance_guard",
         }
-        if node in blocked_nodes:
+        node_str = str(node or "")
+        # Subgraphs can emit composite node ids (for example with ":" separators).
+        # Block if any segment matches known internal nodes.
+        node_parts = {p for p in node_str.replace("/", ":").split(":") if p}
+        if node_str in blocked_nodes or any(part in blocked_nodes for part in node_parts):
+            return False
+
+        # In responder nodes we can receive intermediate model chunks (for example
+        # planner JSON) that should never be shown to Telegram users. Only pass
+        # explicitly named final user-facing responder messages.
+        if "responder" in node_parts:
+            allowed_responder_names = {
+                "chat_manager_responder",
+                "intro_responder",
+            }
+            if msg_name not in allowed_responder_names:
+                return False
+
+        # Extra safety: filter internal Chat Manager "doer" message by message name,
+        # even if node metadata points to parent graph node.
+        blocked_message_names = {
+            "chat_manager_doer",
+        }
+        if isinstance(msg_name, str) and msg_name in blocked_message_names:
             return False
 
         queue_chunk = MessageContent(

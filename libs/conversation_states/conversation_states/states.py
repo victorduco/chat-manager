@@ -6,9 +6,10 @@ from langchain_core.messages import BaseMessage, RemoveMessage, AnyMessage, AIMe
 from langgraph.graph import add_messages
 from .humans import Human
 from .highlights import Highlight
+from .improvements import Improvement
 from .memory import MemoryRecord
 from .messages import MessageAPI, count_tokens
-from .utils.reducers import add_user, add_memory_records, add_highlights, manage_state
+from .utils.reducers import add_user, add_memory_records, add_highlights, add_improvements, manage_state
 
 
 class InternalState(BaseModel):
@@ -22,6 +23,7 @@ class InternalState(BaseModel):
     summary: str = ""
     memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
     highlights: Annotated[list[Highlight], add_highlights] = Field(default_factory=list)
+    improvements: Annotated[list[Improvement], add_improvements] = Field(default_factory=list)
     # Ephemeral routing helper (not persisted to checkpoints).
     chat_manager_decision: Optional[dict] = Field(default=None, exclude=True)
     # Ephemeral trigger for supervisor routing (mention, link, etc.).
@@ -37,6 +39,7 @@ class InternalState(BaseModel):
     intro_hashtag_detected: bool = Field(default=False, exclude=True)
     intro_quality_passed: bool = Field(default=False, exclude=True)
     chat_manager_categories: list[str] = Field(default_factory=list, exclude=True)
+    chat_manager_response_stats: dict = Field(default_factory=dict)
 
     @property
     def reasoning_messages_api(self) -> MessageAPI:
@@ -60,6 +63,8 @@ class InternalState(BaseModel):
             last_sender=sender,
             memory_records=list(external.memory_records or []),
             highlights=list(external.highlights or []),
+            improvements=list(external.improvements or []),
+            chat_manager_response_stats=dict(getattr(external, "chat_manager_response_stats", {}) or {}),
         )
 
     @model_validator(mode="before")
@@ -81,6 +86,11 @@ class InternalState(BaseModel):
                 h if isinstance(h, Highlight) else Highlight(**h)
                 for h in values["highlights"]
             ]
+        if "improvements" in values and values["improvements"] is not None:
+            values["improvements"] = [
+                i if isinstance(i, Improvement) else Improvement(**i)
+                for i in values["improvements"]
+            ]
         return values
 
 
@@ -94,6 +104,8 @@ class ExternalState(BaseModel):
                               manage_state] = Field(default=None)
     memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
     highlights: Annotated[list[Highlight], add_highlights] = Field(default_factory=list)
+    improvements: Annotated[list[Improvement], add_improvements] = Field(default_factory=list)
+    chat_manager_response_stats: dict = Field(default_factory=dict)
     # Ephemeral routing helper for graph_dispatcher (not persisted to checkpoints).
     dispatch_target: Optional[str] = Field(default=None, exclude=True)
 
@@ -114,6 +126,8 @@ class ExternalState(BaseModel):
             last_reasoning=internal.reasoning_messages,
             memory_records=list(getattr(internal, "memory_records", []) or []),
             highlights=list(getattr(internal, "highlights", []) or []),
+            improvements=list(getattr(internal, "improvements", []) or []),
+            chat_manager_response_stats=dict(getattr(internal, "chat_manager_response_stats", {}) or {}),
         )
 
     @model_validator(mode="before")
@@ -134,6 +148,11 @@ class ExternalState(BaseModel):
                 h if isinstance(h, Highlight) else Highlight(**h)
                 for h in values["highlights"]
             ]
+        if "improvements" in values and values["improvements"] is not None:
+            values["improvements"] = [
+                i if isinstance(i, Improvement) else Improvement(**i)
+                for i in values["improvements"]
+            ]
         return values
 
     def clear_state(self):
@@ -145,6 +164,8 @@ class ExternalState(BaseModel):
         self.last_reasoning = []
         self.memory_records = []
         self.highlights = []
+        self.improvements = []
+        self.chat_manager_response_stats = {}
         return
 
     def summarize_overall_state(self) -> str:

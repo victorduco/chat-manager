@@ -5,8 +5,9 @@ from pydantic.type_adapter import TypeAdapter
 from langchain_core.messages import BaseMessage, RemoveMessage, AnyMessage, AIMessage
 from langgraph.graph import add_messages
 from .humans import Human
+from .improvements import Improvement
 from .messages import MessageAPI, count_tokens
-from .utils.reducers import add_user, manage_state
+from .utils.reducers import add_user, add_improvements, manage_state
 
 
 class InternalState(BaseModel):
@@ -18,6 +19,8 @@ class InternalState(BaseModel):
     users: Annotated[list[Human], add_user] = Field(default_factory=list)
     last_sender: Human
     summary: str = ""
+    improvements: Annotated[list[Improvement], add_improvements] = Field(default_factory=list)
+    chat_manager_response_stats: dict = Field(default_factory=dict)
 
     @property
     def reasoning_messages_api(self) -> MessageAPI:
@@ -38,7 +41,9 @@ class InternalState(BaseModel):
             users=list(external.users),
             external_messages=external.messages,
             last_external_message=last_message,
-            last_sender=sender
+            last_sender=sender,
+            improvements=list(external.improvements or []),
+            chat_manager_response_stats=dict(getattr(external, "chat_manager_response_stats", {}) or {}),
         )
 
     @model_validator(mode="before")
@@ -50,6 +55,11 @@ class InternalState(BaseModel):
                     TypeAdapter(AnyMessage).validate_python(m)
                     for m in values[field]
                 ]
+        if "improvements" in values and values["improvements"] is not None:
+            values["improvements"] = [
+                i if isinstance(i, Improvement) else Improvement(**i)
+                for i in values["improvements"]
+            ]
         return values
 
 
@@ -61,6 +71,8 @@ class ExternalState(BaseModel):
     summary: str = ""
     last_reasoning: Annotated[Optional[list[AnyMessage]],
                               manage_state] = Field(default=None)
+    improvements: Annotated[list[Improvement], add_improvements] = Field(default_factory=list)
+    chat_manager_response_stats: dict = Field(default_factory=dict)
 
     @property
     def last_reasoning_api(self) -> MessageAPI:
@@ -76,7 +88,9 @@ class ExternalState(BaseModel):
             messages=[assistant_message],
             users=list(internal.users),
             summary=internal.summary,
-            last_reasoning=internal.reasoning_messages
+            last_reasoning=internal.reasoning_messages,
+            improvements=list(getattr(internal, "improvements", []) or []),
+            chat_manager_response_stats=dict(getattr(internal, "chat_manager_response_stats", {}) or {}),
         )
 
     @model_validator(mode="before")
@@ -87,6 +101,11 @@ class ExternalState(BaseModel):
                 TypeAdapter(AnyMessage).validate_python(m)
                 for m in values["messages"]
             ]
+        if "improvements" in values and values["improvements"] is not None:
+            values["improvements"] = [
+                i if isinstance(i, Improvement) else Improvement(**i)
+                for i in values["improvements"]
+            ]
         return values
 
     def clear_state(self):
@@ -96,6 +115,8 @@ class ExternalState(BaseModel):
         self.summary = ""
         self.users = []
         self.last_reasoning = []
+        self.improvements = []
+        self.chat_manager_response_stats = {}
         return
 
     def summarize_overall_state(self) -> str:
