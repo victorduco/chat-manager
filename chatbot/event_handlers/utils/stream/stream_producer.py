@@ -71,6 +71,42 @@ class StreamProducer():
         return True
 
     @staticmethod
+    def _normalize_thread_info_entries(value: object, *, max_items: int = 40) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        out: list[str] = []
+        for item in value:
+            text = " ".join(str(item or "").split()).strip()
+            if not text:
+                continue
+            out.append(text)
+            if len(out) >= max_items:
+                break
+        return out
+
+    @staticmethod
+    def _thread_info_entries_from_metadata(meta: dict) -> list[str]:
+        entries = StreamProducer._normalize_thread_info_entries(meta.get("thread_info"))
+        chat_description = " ".join(str(meta.get("chat_description") or "").split()).strip()
+        if chat_description:
+            entries.append(f"Chat description: {chat_description}")
+        pinned = meta.get("pinned_message")
+        if isinstance(pinned, dict):
+            pinned_text = " ".join(str(pinned.get("text") or "").split()).strip()
+            if pinned_text:
+                entries.append(f"Pinned message: {pinned_text}")
+        # Preserve order while deduplicating.
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for text in entries:
+            key = text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(text)
+        return deduped[:40]
+
+    @staticmethod
     def _serialize_pinned_message(msg: TgMessage | None) -> dict | None:
         if msg is None:
             return None
@@ -164,6 +200,7 @@ class StreamProducer():
         dispatch_graph_id = StreamProducer._thread_target_graph_id_from_metadata(meta)
         require_intro = StreamProducer._require_intro_from_metadata(meta)
         state = ExternalState()
+        state.thread_info_entries = StreamProducer._thread_info_entries_from_metadata(meta)
         msg_kwargs = dict(getattr(ctx.message, "additional_kwargs", {}) or {})
         msg_kwargs["require_intro"] = require_intro
         ctx.message.additional_kwargs = msg_kwargs

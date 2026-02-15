@@ -141,8 +141,10 @@ def add_improvements(left: list["Improvement"], right: list["Improvement"]) -> l
         target.description = ri.description
         target.reporter = ri.reporter
         target.status = ri.status
+        target.task_number = ri.task_number
+        target.resolution = ri.resolution
+        target.closed_at = ri.closed_at
         target.created_at = ri.created_at
-
     return left
 
 

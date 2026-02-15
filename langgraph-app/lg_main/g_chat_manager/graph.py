@@ -24,6 +24,7 @@ def prepare_external(state: InternalState) -> ExternalState:
             memory_records=list(getattr(state, "memory_records", []) or []),
             highlights=list(getattr(state, "highlights", []) or []),
             improvements=list(getattr(state, "improvements", []) or []),
+            thread_info_entries=list(getattr(state, "thread_info_entries", []) or []),
             chat_manager_response_stats=dict(getattr(state, "chat_manager_response_stats", {}) or {}),
         )
 
@@ -38,6 +39,7 @@ def prepare_external(state: InternalState) -> ExternalState:
             memory_records=list(getattr(state, "memory_records", []) or []),
             highlights=list(getattr(state, "highlights", []) or []),
             improvements=list(getattr(state, "improvements", []) or []),
+            thread_info_entries=list(getattr(state, "thread_info_entries", []) or []),
             chat_manager_response_stats=dict(getattr(state, "chat_manager_response_stats", {}) or {}),
         )
 

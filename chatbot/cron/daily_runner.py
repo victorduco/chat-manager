@@ -105,6 +105,51 @@ def _extract_actions_from_custom(data) -> list[dict]:
         return []
 
 
+def _normalize_thread_info_entries(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in value:
+        text = str(x or "").strip()
+        if not text:
+            continue
+        words = [w for w in text.split() if w.strip()]
+        text = " ".join(words[:15]).strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return out
+
+
+def _extract_thread_info_entries_action(actions: list[dict]) -> list[str] | None:
+    for a in actions:
+        action_type = str(a.get("type") or "").strip()
+        value = a.get("value")
+        try:
+            payload = json.loads(str(value or ""))
+        except Exception:
+            payload = None
+        if action_type == "thread_info_entries" and isinstance(payload, dict):
+            entries = _normalize_thread_info_entries(payload.get("entries"))
+            if entries:
+                return entries
+        if action_type == "system-notification" and isinstance(payload, dict):
+            kind = str(payload.get("kind") or payload.get("type") or payload.get("name") or "").strip()
+            if kind == "thread_info_entries":
+                entries = _normalize_thread_info_entries(payload.get("entries"))
+                if entries:
+                    return entries
+        entries = _normalize_thread_info_entries(value)
+        if entries:
+            return entries
+    return None
+
+
 def _parse_image_action_value(value: object) -> tuple[bytes | None, str | None]:
     """Return (image_bytes, caption)."""
     if value is None:
@@ -159,25 +204,29 @@ def _parse_voice_action_value(value: object) -> tuple[bytes | None, str | None]:
         return None, caption
 
 
-async def _run_daily_graph_and_collect_output(
+async def _run_graph_and_collect_output(
     client,
     thread_id: str,
     assistant_id: str,
     *,
     since_utc: datetime,
     until_utc: datetime,
+    input_payload: dict | None = None,
 ) -> tuple[str, list[dict]]:
     out: list[str] = []
     actions: list[dict] = []
+    payload = {
+        "messages": [],
+        "users": [],
+        "window_since_utc": since_utc.isoformat(),
+        "window_until_utc": until_utc.isoformat(),
+    }
+    if isinstance(input_payload, dict):
+        payload.update(input_payload)
     stream = client.runs.stream(
         thread_id=thread_id,
         assistant_id=assistant_id,
-        input={
-            "messages": [],
-            "users": [],
-            "window_since_utc": since_utc.isoformat(),
-            "window_until_utc": until_utc.isoformat(),
-        },
+        input=payload,
         stream_mode=["messages-tuple", "custom"],
         # Keep a hook for future routing/config.
         config={
@@ -306,13 +355,24 @@ async def run_daily(
                 period_since_utc = last_covered_until or (run_now_utc - timedelta(hours=24))
                 period_until_utc = run_now_utc
 
-                # Collect assistant output; fall back to a deterministic string.
-                text, actions = await _run_daily_graph_and_collect_output(
+                # Single orchestrator graph with two subgraphs:
+                # meta_improver -> daily_summary.
+                text, actions = await _run_graph_and_collect_output(
                     client,
                     thread_id,
                     assistant_id,
                     since_utc=period_since_utc,
                     until_utc=period_until_utc,
+                    input_payload={
+                        "thread_meta": meta,
+                        "thread_info_entries_input": _normalize_thread_info_entries(meta.get("thread_info")),
+                    },
+                )
+                reviewed_entries = _extract_thread_info_entries_action(actions)
+                thread_info_patch = (
+                    {"thread_info": reviewed_entries}
+                    if reviewed_entries is not None
+                    else {}
                 )
                 if text.strip() == "__NO_UPDATES__":
                     # In prod: send nothing. In dev: send a minimal marker.
@@ -336,6 +396,7 @@ async def run_daily(
                             "daily_runner_last_period_since_utc": period_since_utc.isoformat(),
                             "daily_runner_last_period_until_utc": period_until_utc.isoformat(),
                             "daily_runner_last_covered_until_utc": period_until_utc.isoformat(),
+                            **thread_info_patch,
                         },
                     )
                     continue
@@ -415,6 +476,7 @@ async def run_daily(
                         "daily_runner_last_period_since_utc": period_since_utc.isoformat(),
                         "daily_runner_last_period_until_utc": period_until_utc.isoformat(),
                         "daily_runner_last_covered_until_utc": period_until_utc.isoformat(),
+                        **thread_info_patch,
                     },
                 )
                 ran += 1

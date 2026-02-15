@@ -8,7 +8,8 @@
     "graph_supervisor": "lg_main.g_supervisor.graph:graph_supervisor",
     "graph_dispatcher": "lg_main.g_dispatcher.graph:graph_dispatcher",
     "graph_chat_manager": "lg_main.g_chat_manager.graph:graph_chat_manager",
-    "graph_daily_runner": "lg_main.g_daily_runner.graph:graph_daily_runner"
+    "graph_daily_runner": "lg_main.g_daily_runner.graph:graph_daily_runner",
+    "graph_daily_meta_improver": "lg_main.g_daily_meta_improver.graph:graph_daily_meta_improver"
   },
   "env": "./.env",
   "python_version": "3.13",

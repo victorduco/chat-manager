@@ -7,11 +7,12 @@ from pydantic import AliasChoices, BaseModel, Field
 
 
 ImprovementCategory = Literal["bug", "feature"]
-ImprovementStatus = Literal["open", "closed"]
+ImprovementStatus = Literal["open", "closed", "wont_do"]
 
 
 class Improvement(BaseModel):
     id: str
+    task_number: Optional[str] = None
     category: ImprovementCategory
     description: str = Field(
         default="",
@@ -19,4 +20,6 @@ class Improvement(BaseModel):
     )
     reporter: Optional[str] = None
     status: ImprovementStatus = "open"
+    resolution: Optional[str] = None
+    closed_at: Optional[datetime] = None
     created_at: datetime

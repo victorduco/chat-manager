@@ -24,6 +24,7 @@ class InternalState(BaseModel):
     memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
     highlights: Annotated[list[Highlight], add_highlights] = Field(default_factory=list)
     improvements: Annotated[list[Improvement], add_improvements] = Field(default_factory=list)
+    thread_info_entries: list[str] = Field(default_factory=list)
     # Ephemeral routing helper (not persisted to checkpoints).
     chat_manager_decision: Optional[dict] = Field(default=None, exclude=True)
     # Ephemeral trigger for supervisor routing (mention, link, etc.).
@@ -64,6 +65,7 @@ class InternalState(BaseModel):
             memory_records=list(external.memory_records or []),
             highlights=list(external.highlights or []),
             improvements=list(external.improvements or []),
+            thread_info_entries=list(getattr(external, "thread_info_entries", []) or []),
             chat_manager_response_stats=dict(getattr(external, "chat_manager_response_stats", {}) or {}),
         )
 
@@ -91,6 +93,12 @@ class InternalState(BaseModel):
                 i if isinstance(i, Improvement) else Improvement(**i)
                 for i in values["improvements"]
             ]
+        if "thread_info_entries" in values and values["thread_info_entries"] is not None:
+            values["thread_info_entries"] = [
+                str(x).strip()
+                for x in values["thread_info_entries"]
+                if str(x).strip()
+            ]
         return values
 
 
@@ -105,6 +113,7 @@ class ExternalState(BaseModel):
     memory_records: Annotated[list[MemoryRecord], add_memory_records] = Field(default_factory=list)
     highlights: Annotated[list[Highlight], add_highlights] = Field(default_factory=list)
     improvements: Annotated[list[Improvement], add_improvements] = Field(default_factory=list)
+    thread_info_entries: list[str] = Field(default_factory=list)
     chat_manager_response_stats: dict = Field(default_factory=dict)
     # Ephemeral routing helper for graph_dispatcher (not persisted to checkpoints).
     dispatch_target: Optional[str] = Field(default=None, exclude=True)
@@ -127,6 +136,7 @@ class ExternalState(BaseModel):
             memory_records=list(getattr(internal, "memory_records", []) or []),
             highlights=list(getattr(internal, "highlights", []) or []),
             improvements=list(getattr(internal, "improvements", []) or []),
+            thread_info_entries=list(getattr(internal, "thread_info_entries", []) or []),
             chat_manager_response_stats=dict(getattr(internal, "chat_manager_response_stats", {}) or {}),
         )
 
@@ -153,6 +163,12 @@ class ExternalState(BaseModel):
                 i if isinstance(i, Improvement) else Improvement(**i)
                 for i in values["improvements"]
             ]
+        if "thread_info_entries" in values and values["thread_info_entries"] is not None:
+            values["thread_info_entries"] = [
+                str(x).strip()
+                for x in values["thread_info_entries"]
+                if str(x).strip()
+            ]
         return values
 
     def clear_state(self):
@@ -165,6 +181,7 @@ class ExternalState(BaseModel):
         self.memory_records = []
         self.highlights = []
         self.improvements = []
+        self.thread_info_entries = []
         self.chat_manager_response_stats = {}
         return
 

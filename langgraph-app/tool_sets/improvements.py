@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Annotated, Optional, Any
 from uuid import uuid4
 
@@ -12,7 +13,8 @@ from conversation_states.states import InternalState
 
 
 ALLOWED_CATEGORIES = {"bug", "feature"}
-ALLOWED_STATUSES = {"open", "closed", "all"}
+ALLOWED_STATUSES = {"open", "closed", "wont_do", "all"}
+_INC_RE = re.compile(r"^INC(\d{5})$")
 
 
 def _utc_now() -> datetime:
@@ -51,6 +53,25 @@ def _default_reporter_from_state(state: InternalState) -> str | None:
     return first_name or None
 
 
+def _next_inc_number(state: InternalState) -> str:
+    max_n = 0
+    for item in list(getattr(state, "improvements", []) or []):
+        task = str(getattr(item, "task_number", "") or "").strip().upper()
+        m = _INC_RE.match(task)
+        if not m:
+            continue
+        try:
+            max_n = max(max_n, int(m.group(1)))
+        except Exception:
+            continue
+    return f"INC{max_n + 1:05d}"
+
+
+def _public_improvement(item: Improvement) -> dict:
+    # Never expose internal UUID to LLM-facing tool outputs.
+    return item.model_dump(mode="json", exclude={"id"})
+
+
 def _add_improvement_one(
     *,
     state: InternalState,
@@ -70,6 +91,7 @@ def _add_improvement_one(
 
     rec = Improvement(
         id=uuid4().hex,
+        task_number=_next_inc_number(state),
         category=normalized_category,  # type: ignore[arg-type]
         description=final_description,
         reporter=final_reporter,
@@ -79,7 +101,7 @@ def _add_improvement_one(
     if state.improvements is None:
         state.improvements = []
     state.improvements.append(rec)
-    return {"ok": True, "improvement_id": rec.id, "improvement": rec.model_dump(mode="json")}
+    return {"ok": True, "task_number": rec.task_number, "improvement": _public_improvement(rec)}
 
 
 def _normalize_batch_item(item: Any) -> dict | None:
@@ -124,7 +146,7 @@ def _add_improvement_impl(
             added.append(
                 {
                     "index": idx,
-                    "improvement_id": result.get("improvement_id"),
+                    "task_number": result.get("task_number"),
                     "improvement": result.get("improvement"),
                 }
             )
@@ -162,7 +184,7 @@ def _list_improvements_impl(
 ) -> dict:
     normalized_status = _normalize_status(status)
     if not normalized_status:
-        return {"ok": False, "reason": "status must be one of: open, closed, all"}
+            return {"ok": False, "reason": "status must be one of: open, closed, wont_do, all"}
 
     normalized_category = ""
     if category is not None and str(category).strip().lower() not in {"", "all"}:
@@ -189,7 +211,7 @@ def _list_improvements_impl(
     safe_limit = min(max(1, int(limit)), 500)
     page = filtered[safe_offset:safe_offset + safe_limit]
 
-    return {"ok": True, "total": len(filtered), "items": [i.model_dump(mode="json") for i in page]}
+    return {"ok": True, "total": len(filtered), "items": [_public_improvement(i) for i in page]}
 
 
 @tool
@@ -230,7 +252,7 @@ def list_improvements(
     List improvement items by status/category for the last N days.
 
     Filters:
-    - status: open, closed, all (default: open)
+    - status: open, closed, wont_do, all (default: open)
     - days: recent window in days (default: 60)
     - category: bug, feature, all/None
     """

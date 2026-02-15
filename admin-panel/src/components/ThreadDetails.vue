@@ -437,15 +437,21 @@
           <table class="improvements-table">
             <thead>
               <tr>
+                <th>Task</th>
                 <th>Created</th>
                 <th>Category</th>
                 <th>Status</th>
                 <th>Reporter</th>
+                <th>Resolution</th>
+                <th>Closed At</th>
                 <th>Description</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(item, index) in improvements" :key="item.id || index">
+                <td class="improvements-task">
+                  <code>{{ item.task_number || '—' }}</code>
+                </td>
                 <td class="improvements-date">
                   {{ formatDateTime(item.created_at) }}
                 </td>
@@ -456,7 +462,15 @@
                   <code>{{ item.status || '—' }}</code>
                 </td>
                 <td class="improvements-reporter">
-                  <span v-if="item.reporter">@{{ String(item.reporter).replace(/^@+/, '') }}</span>
+                  <span v-if="item.reporter">{{ String(item.reporter) }}</span>
+                  <span v-else class="na">—</span>
+                </td>
+                <td class="improvements-resolution">
+                  <span v-if="item.resolution">{{ item.resolution }}</span>
+                  <span v-else class="na">—</span>
+                </td>
+                <td class="improvements-date">
+                  <span v-if="item.closed_at">{{ formatDateTime(item.closed_at) }}</span>
                   <span v-else class="na">—</span>
                 </td>
                 <td class="improvements-description">

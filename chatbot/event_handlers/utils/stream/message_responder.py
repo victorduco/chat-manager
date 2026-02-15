@@ -45,6 +45,18 @@ def sanitize_html(text: str) -> str:
     return text
 
 
+def _split_text(text: str, max_len: int) -> list[str]:
+    raw = str(text or "")
+    if not raw:
+        return [""]
+    parts: list[str] = []
+    cursor = raw
+    while cursor:
+        parts.append(cursor[:max_len])
+        cursor = cursor[max_len:]
+    return parts
+
+
 # === Response: object for a single message_id ===
 class Response:
     THRESHOLD = 0.4
@@ -71,10 +83,15 @@ class Response:
 
     async def flush(self):
         text = self.buffered_text()
-        if len(text) > self.MAX_LENGTH:
-            return  # Could add truncation or splitting
-        sanitized_text = sanitize_html(text)
+        parts = _split_text(text, self.MAX_LENGTH)
+        sanitized_text = sanitize_html(parts[0])
         await self.ai_msg.edit_text(sanitized_text, parse_mode=self.PARSE_MODE)
+        if len(parts) > 1:
+            for part in parts[1:]:
+                await self.ai_msg.reply_text(
+                    sanitize_html(part),
+                    parse_mode=self.PARSE_MODE,
+                )
         self.cur_txt = text
         self.buffer.clear()
         self.last_sent = datetime.now()
@@ -99,10 +116,17 @@ class MessageResponder:
         return message_id in self.responses
 
     async def initialize(self, message_id: str, first_chunk: str, message_type: str = "text"):
-        sanitized_chunk = sanitize_html(first_chunk)
-        ai_msg = await self.tg_message.reply_text(sanitized_chunk, parse_mode=Response.PARSE_MODE)
+        first_parts = _split_text(first_chunk, Response.MAX_LENGTH)
+        ai_msg = await self.tg_message.reply_text(
+            sanitize_html(first_parts[0]),
+            parse_mode=Response.PARSE_MODE,
+        )
         self.responses[message_id] = Response(
-            ai_msg, type=message_type, cur_txt=first_chunk)
+            ai_msg, type=message_type, cur_txt=first_parts[0]
+        )
+        if len(first_parts) > 1:
+            # Keep remaining content in the normal flush path.
+            self.responses[message_id].append("".join(first_parts[1:]))
 
     async def add(self, message_id: str, chunk: str):
         response = self.responses[message_id]
